@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { Sector } from './types';
+import { type Sector } from './types';
 
 const SOCKET_URL = 'http://localhost:3001';
 
@@ -44,5 +44,11 @@ export function useRealTimeStatus() {
         }
     };
 
-    return { sectors, updateStatus };
+    const updateQueue = (sectorId: string, action: 'add' | 'remove') => {
+        if (socket) {
+            socket.emit('update_queue', { sectorId, action });
+        }
+    };
+
+    return { sectors, updateStatus, updateQueue };
 }
