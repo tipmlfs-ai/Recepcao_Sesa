@@ -8,6 +8,10 @@
     "skipLibCheck": true,
     "resolveJsonModule": true
   },
+  "exclude": [
+    "node_modules",
+    "prisma.config.ts"
+  ],
   "ts-node": {
     "esm": true
   }
