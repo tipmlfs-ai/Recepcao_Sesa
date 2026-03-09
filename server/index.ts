@@ -130,7 +130,7 @@ app.post('/api/auth/login', async (req, res) => {
 
 app.get('/api/citizens/:cpf', authenticateToken, async (req, res) => {
     try {
-        const { cpf } = req.params;
+        const cpf = req.params.cpf as string;
         const citizen = await prisma.citizen.findUnique({
             where: { cpf }
         });
