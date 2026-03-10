@@ -212,14 +212,20 @@ app.get('/api/visits', authenticateToken, async (req, res) => {
 
         // Search by ticket code
         if (code) {
-            queryOptions.where = { code: { contains: code as string, mode: 'insensitive' } };
+            queryOptions.where = {
+                code: { contains: code as string, mode: 'insensitive' },
+                NOT: { code: null }
+            };
             const visits = await prisma.visit.findMany(queryOptions);
             return res.json(visits);
         }
 
         // Search by CPF
         if (cpf) {
-            queryOptions.where = { citizenId: { contains: cpf as string } };
+            queryOptions.where = {
+                citizenId: { contains: cpf as string },
+                NOT: { code: null }
+            };
             const visits = await prisma.visit.findMany(queryOptions);
             return res.json(visits);
         }
@@ -245,13 +251,19 @@ app.get('/api/visits', authenticateToken, async (req, res) => {
                 endDate.setDate(0);
                 endDate.setHours(23, 59, 59, 999);
             }
-            queryOptions.where = { timestamp: { gte: startDate, lte: endDate } };
+            queryOptions.where = {
+                timestamp: { gte: startDate, lte: endDate },
+                NOT: { code: null }
+            };
         } else {
             const todayStart = new Date();
             todayStart.setHours(0, 0, 0, 0);
             const todayEnd = new Date();
             todayEnd.setHours(23, 59, 59, 999);
-            queryOptions.where = { timestamp: { gte: todayStart, lte: todayEnd } };
+            queryOptions.where = {
+                timestamp: { gte: todayStart, lte: todayEnd },
+                NOT: { code: null }
+            };
         }
 
         const visits = await prisma.visit.findMany(queryOptions);
