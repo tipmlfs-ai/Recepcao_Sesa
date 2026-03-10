@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 
 interface Visit {
     id: string;
-    code: string;
+    code?: string | null;
     citizen: {
         cpf: string;
         name: string;
@@ -14,6 +14,7 @@ interface Visit {
         name: string;
     };
     timestamp: string;
+    ticketStatus?: string | null;
     user?: {
         email: string;
     };
@@ -299,8 +300,8 @@ export const HistoryTab: React.FC = () => {
                                 visits.map(visit => (
                                     <tr key={visit.id} className="hover:bg-slate-700/30 transition-colors group">
                                         <td className="px-6 py-4">
-                                            <span className="bg-slate-900 text-white px-3 py-1.5 rounded-lg border border-slate-700 font-mono font-black text-base shadow-sm group-hover:border-indigo-500/50 transition-colors">
-                                                {visit.code}
+                                            <span className={`px-3 py-1.5 rounded-lg border font-mono font-black text-base shadow-sm group-hover:border-indigo-500/50 transition-colors ${visit.code ? 'bg-slate-900 text-white border-slate-700' : 'bg-slate-800/50 text-slate-500 border-slate-700/50'}`}>
+                                                {visit.code || '—'}
                                             </span>
                                         </td>
                                         <td className="px-6 py-4">
@@ -319,8 +320,9 @@ export const HistoryTab: React.FC = () => {
                                         <td className="px-6 py-4 text-right">
                                             <button
                                                 onClick={() => handleReprint(visit)}
-                                                className="bg-indigo-600/10 hover:bg-indigo-600 text-indigo-400 hover:text-white p-2.5 rounded-xl transition-all border border-indigo-500/20 flex items-center gap-2 ml-auto"
-                                                title="Reimprimir Ticket (Sem CPF)"
+                                                disabled={!visit.code}
+                                                className={`p-2.5 rounded-xl transition-all border flex items-center gap-2 ml-auto ${!visit.code ? 'bg-slate-700/50 text-slate-500 border-slate-700/50 cursor-not-allowed' : 'bg-indigo-600/10 hover:bg-indigo-600 text-indigo-400 hover:text-white border-indigo-500/20'}`}
+                                                title={visit.code ? "Reimprimir Ticket (Sem CPF)" : "Não disponível para este registro"}
                                             >
                                                 <Printer className="w-4 h-4" />
                                                 <span className="text-xs font-bold uppercase tracking-tighter">Reimprimir</span>
