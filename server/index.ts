@@ -256,9 +256,13 @@ app.get('/api/visits', authenticateToken, async (req, res) => {
 
         const visits = await prisma.visit.findMany(queryOptions);
         res.json(visits);
-    } catch (error) {
+    } catch (error: any) {
         console.error('Error fetching visits:', error);
-        res.status(500).json({ error: 'Failed to fetch visits' });
+        res.status(500).json({
+            error: 'Failed to fetch visits',
+            details: error.message,
+            hint: 'Provavelmente existem registros antigos com a coluna "code" vazia (NULL) no banco de dados. Rode o script de limpeza no SQL Editor do Supabase.'
+        });
     }
 });
 
