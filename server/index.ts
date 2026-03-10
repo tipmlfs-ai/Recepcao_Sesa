@@ -349,7 +349,7 @@ app.patch('/api/users/:id/password', authenticateToken, requireAdmin, async (req
 
 app.patch('/api/sectors/:id/status', authenticateToken, async (req, res) => {
     try {
-        const { id } = req.params;
+        const id = req.params.id as string;
         const { status } = req.body;
 
         const updatedSector = await prisma.sector.update({
@@ -366,7 +366,7 @@ app.patch('/api/sectors/:id/status', authenticateToken, async (req, res) => {
 
 app.patch('/api/sectors/:id/queue', authenticateToken, async (req, res) => {
     try {
-        const { id } = req.params;
+        const id = req.params.id as string;
         const { action } = req.body; // 'add' | 'remove'
 
         const currentSector = await prisma.sector.findUnique({ where: { id } });
