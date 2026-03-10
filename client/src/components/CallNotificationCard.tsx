@@ -19,34 +19,39 @@ const CallNotificationCard: React.FC = () => {
             .on(
                 'postgres_changes',
                 { event: 'UPDATE', schema: 'public', table: 'Visit' },
-                (payload) => {
+                async (payload) => {
                     const updated = payload.new as any;
                     if (updated.ticketStatus === 'IN_SERVICE') {
-                        // Fetch full details (citizen name + sector sound)
-                        const token = localStorage.getItem('@RecepcaoSesa:token');
-                        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-                        fetch(`${apiUrl}/api/citizens/${updated.citizenId}`, {
-                            headers: { 'Authorization': `Bearer ${token}` }
-                        })
-                            .then(r => r.json())
-                            .then(citizen => {
-                                setNotification({
-                                    ...updated,
-                                    citizen: { cpf: citizen.cpf, name: citizen.name },
-                                    sector: { id: updated.sectorId, name: updated.sectorId, soundUrl: undefined }
-                                });
+                        try {
+                            const token = localStorage.getItem('@RecepcaoSesa:token');
+                            const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
-                                // Toca som se o setor tiver soundUrl
-                                if (updated.soundUrl) {
-                                    if (audioRef.current) audioRef.current.pause();
-                                    audioRef.current = new Audio(updated.soundUrl);
-                                    audioRef.current.play().catch(() => { });
-                                } else {
-                                    // Tom padrão de notificação
-                                    playDefaultChime();
-                                }
-                            })
-                            .catch(() => { });
+                            // Fetch Citizen and Sector details in parallel
+                            const [citizenRes, sectorRes] = await Promise.all([
+                                fetch(`${apiUrl}/api/citizens/${updated.citizenId}`, { headers: { 'Authorization': `Bearer ${token}` } }),
+                                fetch(`${apiUrl}/api/sectors/${updated.sectorId}`, { headers: { 'Authorization': `Bearer ${token}` } })
+                            ]);
+
+                            const citizen = await citizenRes.json();
+                            const sector = await sectorRes.json();
+
+                            setNotification({
+                                ...updated,
+                                citizen: { cpf: citizen.cpf, name: citizen.name },
+                                sector: { id: sector.id, name: sector.name, soundUrl: sector.soundUrl }
+                            });
+
+                            // Play sound
+                            if (sector.soundUrl) {
+                                if (audioRef.current) audioRef.current.pause();
+                                audioRef.current = new Audio(sector.soundUrl);
+                                audioRef.current.play().catch(() => { });
+                            } else {
+                                playDefaultChime();
+                            }
+                        } catch (error) {
+                            console.error('Error fetching call details:', error);
+                        }
                     }
                 }
             )
@@ -82,37 +87,54 @@ const CallNotificationCard: React.FC = () => {
     if (!notification) return null;
 
     return (
-        <div className="animate-in slide-in-from-top-4 duration-500 bg-gradient-to-r from-indigo-600/20 to-purple-600/20 border-2 border-indigo-500 rounded-2xl p-5 mb-6 relative shadow-lg shadow-indigo-500/20">
+        <div className="animate-in fade-in zoom-in slide-in-from-top-4 duration-500 bg-slate-900/90 backdrop-blur-md border-2 border-indigo-500 rounded-2xl p-4 mb-4 relative shadow-2xl shadow-indigo-500/30 overflow-hidden group">
+            {/* Glossy top highlight */}
+            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-indigo-400 to-transparent opacity-50" />
+
             <button
                 onClick={() => setNotification(null)}
-                className="absolute top-3 right-3 text-slate-400 hover:text-white transition-colors"
+                className="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors bg-white/5 hover:bg-white/10 p-1.5 rounded-lg border border-white/10"
                 aria-label="Fechar notificação"
             >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
             </button>
 
-            <div className="flex items-center gap-3 mb-3">
-                <div className="p-2 bg-indigo-500/20 rounded-lg animate-pulse">
-                    <Bell className="w-6 h-6 text-indigo-400" />
+            <div className="flex flex-col md:flex-row items-center gap-4">
+                {/* Visual Indicator */}
+                <div className="flex-shrink-0 p-3 bg-indigo-600 rounded-xl shadow-lg shadow-indigo-500/40 relative">
+                    <Bell className="w-7 h-7 text-white animate-bounce" />
+                    <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-slate-900" />
                 </div>
-                <div>
-                    <p className="text-indigo-300 text-sm font-semibold uppercase tracking-wider">Setor chamou o próximo</p>
-                    <p className="text-white font-bold text-lg">{notification.sector?.name || 'Setor'}</p>
-                </div>
-                <div className="ml-auto text-right">
-                    <p className="text-slate-400 text-xs">Código</p>
-                    <p className="text-white font-black text-2xl tracking-widest font-mono">{notification.code}</p>
-                </div>
-            </div>
 
-            <div className="bg-slate-900/60 rounded-xl p-4 grid grid-cols-2 gap-4">
-                <div>
-                    <p className="text-slate-400 text-xs mb-1">Cidadão</p>
-                    <p className="text-white font-semibold">{notification.citizen?.name || '—'}</p>
+                {/* Main Content */}
+                <div className="flex-grow text-center md:text-left">
+                    <div className="flex flex-col md:flex-row md:items-baseline gap-1 md:gap-3 mb-1">
+                        <span className="text-indigo-400 text-[11px] font-bold uppercase tracking-[0.2em]">Chamada Próximo</span>
+                        <h3 className="text-white font-black text-xl tracking-tight uppercase">
+                            Setor {notification.sector?.name || 'Setor'}
+                        </h3>
+                    </div>
+
+                    <div className="flex flex-col md:flex-row items-center gap-3 md:gap-6">
+                        <div className="flex items-center gap-2">
+                            <span className="text-slate-500 text-xs font-medium uppercase">Cidadão:</span>
+                            <span className="text-slate-100 font-bold text-lg">{notification.citizen?.name || '—'}</span>
+                        </div>
+                        <div className="flex items-center gap-2 px-3 py-1 bg-white/5 rounded-full border border-white/10">
+                            <span className="text-slate-500 text-[10px] font-bold uppercase">CPF:</span>
+                            <span className="text-slate-300 font-mono text-xs">{notification.citizen?.cpf || '—'}</span>
+                        </div>
+                    </div>
                 </div>
-                <div>
-                    <p className="text-slate-400 text-xs mb-1">CPF</p>
-                    <p className="text-white font-mono">{notification.citizen?.cpf || '—'}</p>
+
+                {/* Ticket Badge */}
+                <div className="flex-shrink-0 bg-gradient-to-b from-indigo-500 to-indigo-700 p-1 rounded-xl shadow-xl">
+                    <div className="bg-slate-900/40 backdrop-blur-sm rounded-lg px-6 py-2 border border-white/10 flex flex-col items-center">
+                        <span className="text-indigo-200 text-[10px] font-black uppercase tracking-tighter mb-0.5">Ticket</span>
+                        <span className="text-white font-black text-3xl tracking-wide font-mono leading-none">
+                            {notification.code}
+                        </span>
+                    </div>
                 </div>
             </div>
         </div>
