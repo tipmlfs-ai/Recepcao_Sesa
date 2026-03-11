@@ -28,24 +28,27 @@ const Controller: React.FC = () => {
         if (!sector) return;
 
         const storageKey = `@RecepcaoSesa:cooldown:${sector.id}`;
-        const lastCall = localStorage.getItem(storageKey);
 
-        if (lastCall) {
-            const diff = Math.floor((Date.now() - parseInt(lastCall)) / 1000);
-            if (diff < 300) { // 5 minutes = 300 seconds
-                setCooldown(300 - diff);
-            }
-        }
-
-        const timer = setInterval(() => {
-            setCooldown(current => {
-                if (current <= 1) {
-                    clearInterval(timer);
-                    return 0;
+        const updateTimer = () => {
+            const lastCall = localStorage.getItem(storageKey);
+            if (lastCall) {
+                const diff = Math.floor((Date.now() - parseInt(lastCall)) / 1000);
+                if (diff < 300) { // 5 minutes = 300 seconds
+                    setCooldown(300 - diff);
+                } else {
+                    setCooldown(0);
+                    localStorage.removeItem(storageKey);
                 }
-                return current - 1;
-            });
-        }, 1000);
+            } else {
+                setCooldown(0);
+            }
+        };
+
+        // Initial check
+        updateTimer();
+
+        // Check every second
+        const timer = setInterval(updateTimer, 1000);
 
         return () => clearInterval(timer);
     }, [sector?.id]);
@@ -221,10 +224,10 @@ const Controller: React.FC = () => {
                     onClick={handleCallNext}
                     disabled={callingNext || sector.queueCount === 0 || cooldown > 0}
                     className={`w-full group relative overflow-hidden flex flex-col items-center justify-center gap-2 p-6 rounded-2xl font-bold transition-all duration-300 active:scale-[0.98] ${cooldown > 0
-                            ? 'bg-slate-800 border-2 border-slate-700 text-slate-500 cursor-not-allowed'
-                            : sector.queueCount === 0
-                                ? 'bg-slate-800/50 border-2 border-slate-700/50 text-slate-500 cursor-not-allowed'
-                                : 'bg-indigo-600 border-2 border-indigo-500 text-white hover:bg-indigo-500 hover:-translate-y-1 hover:shadow-[0_10px_40px_-10px_rgba(79,70,229,0.6)] cursor-pointer'
+                        ? 'bg-slate-800 border-2 border-slate-700 text-slate-500 cursor-not-allowed'
+                        : sector.queueCount === 0
+                            ? 'bg-slate-800/50 border-2 border-slate-700/50 text-slate-500 cursor-not-allowed'
+                            : 'bg-indigo-600 border-2 border-indigo-500 text-white hover:bg-indigo-500 hover:-translate-y-1 hover:shadow-[0_10px_40px_-10px_rgba(79,70,229,0.6)] cursor-pointer'
                         }`}
                 >
                     <div className="flex items-center gap-3 relative z-10">
@@ -244,8 +247,8 @@ const Controller: React.FC = () => {
                 <div className="grid grid-cols-3 gap-3 w-full mt-2">
                     <button
                         className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all duration-300 ${sector.status === 'AVAILABLE'
-                                ? 'bg-emerald-500/10 border-emerald-500 shadow-[0_0_30px_rgba(16,185,129,0.2)] scale-100 z-10'
-                                : 'bg-slate-800/50 border-slate-700 hover:border-emerald-500/30 hover:bg-slate-800 scale-95 opacity-70 hover:opacity-100'
+                            ? 'bg-emerald-500/10 border-emerald-500 shadow-[0_0_30px_rgba(16,185,129,0.2)] scale-100 z-10'
+                            : 'bg-slate-800/50 border-slate-700 hover:border-emerald-500/30 hover:bg-slate-800 scale-95 opacity-70 hover:opacity-100'
                             }`}
                         onClick={() => updateStatus(sector.id, 'AVAILABLE')}
                         title="Marcar como Livre"
@@ -256,8 +259,8 @@ const Controller: React.FC = () => {
 
                     <button
                         className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all duration-300 ${sector.status === 'BUSY'
-                                ? 'bg-rose-500/10 border-rose-500 shadow-[0_0_30px_rgba(244,63,94,0.2)] scale-100 z-10'
-                                : 'bg-slate-800/50 border-slate-700 hover:border-rose-500/30 hover:bg-slate-800 scale-95 opacity-70 hover:opacity-100'
+                            ? 'bg-rose-500/10 border-rose-500 shadow-[0_0_30px_rgba(244,63,94,0.2)] scale-100 z-10'
+                            : 'bg-slate-800/50 border-slate-700 hover:border-rose-500/30 hover:bg-slate-800 scale-95 opacity-70 hover:opacity-100'
                             }`}
                         onClick={() => updateStatus(sector.id, 'BUSY')}
                         title="Marcar como Ocupado"
@@ -268,8 +271,8 @@ const Controller: React.FC = () => {
 
                     <button
                         className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all duration-300 ${sector.status === 'AWAY'
-                                ? 'bg-amber-500/10 border-amber-500 shadow-[0_0_30px_rgba(245,158,11,0.2)] scale-100 z-10'
-                                : 'bg-slate-800/50 border-slate-700 hover:border-amber-500/30 hover:bg-slate-800 scale-95 opacity-70 hover:opacity-100'
+                            ? 'bg-amber-500/10 border-amber-500 shadow-[0_0_30px_rgba(245,158,11,0.2)] scale-100 z-10'
+                            : 'bg-slate-800/50 border-slate-700 hover:border-amber-500/30 hover:bg-slate-800 scale-95 opacity-70 hover:opacity-100'
                             }`}
                         onClick={() => updateStatus(sector.id, 'AWAY')}
                         title="Marcar como Ausente"
