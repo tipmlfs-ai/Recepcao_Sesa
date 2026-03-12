@@ -101,7 +101,7 @@ export const HistoryTab: React.FC = () => {
             </head>
             <body>
                <div class="ticket">
-                   <img src="/logo.png" alt="Logo">
+                   <img src="${window.location.origin}/logo.png" alt="Logo">
                    <h1>SECRETARIA MUNICIPAL DE SAÚDE</h1>
                    <p style="font-size: 10px; margin: 0;">PREFEITURA DE LAURO DE FREITAS</p>
                    
@@ -336,8 +336,8 @@ export const HistoryTab: React.FC = () => {
                                                         onClick={() => handleReprint(visit)}
                                                         disabled={isDisabled}
                                                         className={`p-2.5 rounded-xl transition-all border flex items-center gap-2 ml-auto ${isDisabled
-                                                                ? 'bg-slate-700/50 text-slate-500 border-slate-700/50 cursor-not-allowed opacity-50'
-                                                                : 'bg-indigo-600/10 hover:bg-indigo-600 text-indigo-400 hover:text-white border-indigo-500/20'
+                                                            ? 'bg-slate-700/50 text-slate-500 border-slate-700/50 cursor-not-allowed opacity-50'
+                                                            : 'bg-indigo-600/10 hover:bg-indigo-600 text-indigo-400 hover:text-white border-indigo-500/20'
                                                             }`}
                                                         title={buttonTitle}
                                                     >

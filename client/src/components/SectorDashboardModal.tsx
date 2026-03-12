@@ -30,6 +30,11 @@ export const SectorDashboardModal: React.FC<SectorDashboardModalProps> = ({ isOp
     const [visits, setVisits] = useState<VisitData[]>([]);
     const [loading, setLoading] = useState(false);
 
+    // Date Range State
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
+    const [isCustomDateApplied, setIsCustomDateApplied] = useState(false);
+
     const [stats, setStats] = useState({
         today: 0,
         week: 0,
@@ -38,12 +43,12 @@ export const SectorDashboardModal: React.FC<SectorDashboardModalProps> = ({ isOp
 
     useEffect(() => {
         if (isOpen && sectorId) {
-            fetchDashboardData();
+            fetchStats();
+            fetchHistoryData();
         }
     }, [isOpen, sectorId]);
 
-    const fetchDashboardData = async () => {
-        setLoading(true);
+    const fetchStats = async () => {
         try {
             const token = localStorage.getItem('@RecepcaoSesa:token');
             const headers = { 'Authorization': `Bearer ${token}` };
@@ -61,20 +66,68 @@ export const SectorDashboardModal: React.FC<SectorDashboardModalProps> = ({ isOp
             const dataMonth = await resMonth.json();
 
             setStats({
-                today: dataToday.length || 0,
-                week: dataWeek.length || 0,
-                month: dataMonth.length || 0
+                today: dataToday?.length || 0,
+                week: dataWeek?.length || 0,
+                month: dataMonth?.length || 0
             });
+        } catch (error) {
+            console.error("Error fetching stats data", error);
+        }
+    };
 
-            // Set all historical data (using month data as base history for the view, can be tweaked to fetch all if pagination is implemented)
-            setVisits(dataMonth);
+    const fetchHistoryData = async (isCustom = false) => {
+        setLoading(true);
+        try {
+            const token = localStorage.getItem('@RecepcaoSesa:token');
+            const headers = { 'Authorization': `Bearer ${token}` };
+
+            let url = '';
+
+            if (isCustom && startDate && endDate) {
+                // Fetch using custom date range
+                url = `${API_URL}/api/visits?sectorId=${sectorId}&ticketStatus=FINISHED&filterType=custom&startDate=${startDate}&endDate=${endDate}`;
+            } else {
+                // Default to current month history
+                url = `${API_URL}/api/visits?sectorId=${sectorId}&ticketStatus=FINISHED&filterType=month&date=${new Date().toISOString()}`;
+            }
+
+            const res = await fetch(url, { headers });
+            const data = await res.json();
+
+            if (res.ok) {
+                setVisits(data || []);
+            } else {
+                toast.error("Erro ao carregar histórico.");
+            }
 
         } catch (error) {
-            console.error("Error fetching dashboard data", error);
-            toast.error("Erro ao carregar dados do dashboard.");
+            console.error("Error fetching history data", error);
+            toast.error("Falha de comunicação com o servidor.");
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleApplyDateFilter = () => {
+        if (!startDate || !endDate) {
+            toast.warning("Por favor, selecione a data inicial e final.");
+            return;
+        }
+
+        if (new Date(startDate) > new Date(endDate)) {
+            toast.error("A data inicial não pode ser superior à data final.");
+            return;
+        }
+
+        setIsCustomDateApplied(true);
+        fetchHistoryData(true);
+    };
+
+    const handleClearDateFilter = () => {
+        setStartDate('');
+        setEndDate('');
+        setIsCustomDateApplied(false);
+        fetchHistoryData(false); // fetch default month back
     };
 
     if (!isOpen) return null;
@@ -157,30 +210,77 @@ export const SectorDashboardModal: React.FC<SectorDashboardModalProps> = ({ isOp
                         </div>
                     </div>
 
-                    {/* Search and Filter */}
-                    <div className="bg-slate-800/50 border border-slate-700/50 p-4 rounded-xl flex flex-col md:flex-row gap-3">
-                        <div className="flex-1 relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                            <input
-                                type="text"
-                                placeholder="Pesquisar histórico..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-10 pr-4 py-2.5 text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                            />
+                    {/* Search and Filters Array */}
+                    <div className="flex flex-col gap-4">
+                        {/* Date Range Filter */}
+                        <div className="bg-slate-800/50 border border-slate-700/50 p-4 rounded-xl flex flex-col md:flex-row items-end gap-4 h-fit">
+                            <div className="w-full md:w-auto">
+                                <label className="block text-xs font-bold text-slate-400 uppercase mb-2 ml-1">Data Inicial</label>
+                                <input
+                                    type="date"
+                                    value={startDate}
+                                    onChange={(e) => setStartDate(e.target.value)}
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                                />
+                            </div>
+                            <div className="w-full md:w-auto">
+                                <label className="block text-xs font-bold text-slate-400 uppercase mb-2 ml-1">Data Final</label>
+                                <input
+                                    type="date"
+                                    value={endDate}
+                                    onChange={(e) => setEndDate(e.target.value)}
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                                />
+                            </div>
+                            <div className="flex gap-2 w-full md:w-auto mt-4 md:mt-0">
+                                <button
+                                    onClick={handleApplyDateFilter}
+                                    disabled={loading}
+                                    className="flex-1 md:flex-none px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                                >
+                                    <Filter className="w-4 h-4" /> Aplicar
+                                </button>
+                                {isCustomDateApplied && (
+                                    <button
+                                        onClick={handleClearDateFilter}
+                                        disabled={loading}
+                                        className="px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors title='Limpar Filtro de Data'"
+                                    >
+                                        <X className="w-4 h-4" />
+                                    </button>
+                                )}
+                            </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                            <Filter className="w-5 h-5 text-slate-400" />
-                            <select
-                                value={filterType}
-                                onChange={(e) => setFilterType(e.target.value)}
-                                className="bg-slate-900 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                            >
-                                <option value="all">Todos os Campos</option>
-                                <option value="name">Apenas Nome</option>
-                                <option value="cpf">Apenas CPF</option>
-                                <option value="phone">Apenas Telefone</option>
-                            </select>
+
+                        {/* Search and Text Filter */}
+                        <div className="bg-slate-800/50 border border-slate-700/50 p-4 rounded-xl flex flex-col md:flex-row gap-3 relative">
+                            <div className="absolute -top-3 left-4 bg-slate-800 px-2 text-xs font-bold text-indigo-400 uppercase tracking-widest border border-slate-700/50 rounded-md">
+                                {isCustomDateApplied ? 'Histórico: Período Personalizado' : 'Histórico: Mês Atual'} • {filteredVisits.length} registros
+                            </div>
+
+                            <div className="flex-1 relative mt-2">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                                <input
+                                    type="text"
+                                    placeholder="Pesquisar histórico na tabela..."
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-10 pr-4 py-2.5 text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                                />
+                            </div>
+                            <div className="flex items-center gap-2 mt-2">
+                                <Filter className="w-5 h-5 text-slate-400" />
+                                <select
+                                    value={filterType}
+                                    onChange={(e) => setFilterType(e.target.value)}
+                                    className="bg-slate-900 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                                >
+                                    <option value="all">Busca em Todos os Campos</option>
+                                    <option value="name">Apenas Nome</option>
+                                    <option value="cpf">Apenas CPF</option>
+                                    <option value="phone">Apenas Telefone</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
 

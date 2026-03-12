@@ -56,28 +56,28 @@ const Controller: React.FC = () => {
     }, [sector?.id]);
 
     const prevQueueRef = useRef(sector?.queueCount || 0);
+    const audioRef = useRef<HTMLAudioElement | null>(null);
+
+    useEffect(() => {
+        // Creates the audio element; browsers relax autoplay rules slightly if it's playing a quick, user-initiated DOM action indirectly (like via Realtime).
+        audioRef.current = new Audio('/notification.mp3');
+        audioRef.current.load();
+    }, []);
 
     const playNotificationSound = () => {
         try {
-            const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-            if (!AudioContext) return;
-            const audioCtx = new AudioContext();
-            const playTone = (freq: number, startTime: number, duration: number) => {
-                const oscillator = audioCtx.createOscillator();
-                const gainNode = audioCtx.createGain();
-                oscillator.connect(gainNode);
-                gainNode.connect(audioCtx.destination);
-                oscillator.type = 'sine';
-                oscillator.frequency.setValueAtTime(freq, startTime);
-                gainNode.gain.setValueAtTime(0, startTime);
-                gainNode.gain.linearRampToValueAtTime(0.3, startTime + 0.05);
-                gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
-                oscillator.start(startTime);
-                oscillator.stop(startTime + duration);
-            };
-            playTone(659.25, audioCtx.currentTime, 0.4);
-            playTone(523.25, audioCtx.currentTime + 0.25, 0.6);
-        } catch { }
+            if (audioRef.current) {
+                audioRef.current.currentTime = 0;
+                const playPromise = audioRef.current.play();
+                if (playPromise !== undefined) {
+                    playPromise.catch(error => {
+                        console.warn("Autoplay prevented sound playback. A user interaction is required first.", error);
+                    });
+                }
+            }
+        } catch (e) {
+            console.warn("Sound play failed", e);
+        }
     };
 
     useEffect(() => {
@@ -205,12 +205,14 @@ const Controller: React.FC = () => {
 
     return (
         <div className="min-h-screen bg-slate-900 flex flex-col p-4 md:p-8 font-sans selection:bg-indigo-500/30">
-            <header className="flex justify-between items-center mb-8 max-w-lg mx-auto w-full">
+            <header className="flex justify-between items-center mb-10 max-w-lg mx-auto w-full">
                 <div className="flex items-center gap-4">
-                    <img src="/logo.png" alt="Logo Prefeitura" className="h-12 object-contain drop-shadow-md" />
+                    <div className="bg-white p-2 rounded-xl shadow-lg shadow-white/5">
+                        <img src="/logo.png" alt="Logo Prefeitura" className="h-10 w-[80px] object-contain" />
+                    </div>
                     <div>
-                        <p className="text-slate-400 text-xs font-bold tracking-widest uppercase mb-1">Painel de Controle</p>
-                        <h1 className="text-3xl font-bold bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">{sector.name}</h1>
+                        <p className="text-slate-400 text-[10px] font-black tracking-widest uppercase mb-0.5">Painel do Setor</p>
+                        <h1 className="text-2xl font-black text-white tracking-tight">{sector.name}</h1>
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -233,17 +235,22 @@ const Controller: React.FC = () => {
 
             <main className="flex-1 flex flex-col items-center max-w-lg mx-auto w-full gap-5">
                 {/* Queue count */}
-                <div className="w-full bg-slate-800/60 backdrop-blur-sm border border-slate-700/50 rounded-2xl p-6 flex items-center justify-between shadow-xl">
-                    <div>
-                        <p className="text-slate-300 font-semibold mb-1">Pessoas na fila de espera</p>
-                        <div className="flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                            <p className="text-xs text-slate-500 font-medium uppercase tracking-wider">Tempo Real</p>
+                <div className="w-full bg-slate-800/40 backdrop-blur-xl border border-slate-700/50 rounded-3xl p-6 flex flex-col sm:flex-row items-center justify-between shadow-2xl gap-4">
+                    <div className="text-center sm:text-left">
+                        <p className="text-slate-300 font-bold mb-1.5 flex items-center justify-center sm:justify-start gap-2">
+                            Pessoas na fila de espera
+                        </p>
+                        <div className="flex items-center justify-center sm:justify-start gap-2">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.5)]"></span>
+                            <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest flex items-center gap-1">
+                                ATUALIZAÇÃO EM TEMPO REAL
+                            </p>
                         </div>
                     </div>
-                    <div className="bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 px-6 py-4 rounded-xl flex items-center gap-3 shadow-[0_0_30px_rgba(79,70,229,0.15)]">
-                        <Users className="w-8 h-8 opacity-80" />
-                        <span className="text-4xl font-black">{sector.queueCount || 0}</span>
+                    <div className="bg-gradient-to-br from-indigo-500/10 to-indigo-900/40 border border-indigo-500/20 px-8 py-3 rounded-2xl flex items-center justify-center min-w-[120px] shadow-inner font-mono relative overflow-hidden">
+                        <div className="absolute inset-0 bg-indigo-400/10 blur-xl"></div>
+                        <Users className="w-4 h-4 text-indigo-400/50 absolute left-3 top-1/2 -translate-y-1/2" />
+                        <span className="text-4xl font-black text-indigo-400 relative z-10 drop-shadow-md">{sector ? sector.queueCount : 0}</span>
                     </div>
                 </div>
 
@@ -261,12 +268,12 @@ const Controller: React.FC = () => {
                     onClick={handleCallNext}
                     disabled={callingNext || sector.queueCount === 0 || cooldown > 0 || sector.status !== 'AVAILABLE'}
                     className={`w-full group relative overflow-hidden flex flex-col items-center justify-center gap-2 p-6 rounded-2xl font-bold transition-all duration-300 active:scale-[0.98] ${sector.status !== 'AVAILABLE'
+                        ? 'bg-slate-800 border-2 border-slate-700 text-slate-500 cursor-not-allowed'
+                        : cooldown > 0
                             ? 'bg-slate-800 border-2 border-slate-700 text-slate-500 cursor-not-allowed'
-                            : cooldown > 0
-                                ? 'bg-slate-800 border-2 border-slate-700 text-slate-500 cursor-not-allowed'
-                                : sector.queueCount === 0
-                                    ? 'bg-slate-800/50 border-2 border-slate-700/50 text-slate-500 cursor-not-allowed'
-                                    : 'bg-indigo-600 border-2 border-indigo-500 text-white hover:bg-indigo-500 hover:-translate-y-1 hover:shadow-[0_10px_40px_-10px_rgba(79,70,229,0.6)] cursor-pointer'
+                            : sector.queueCount === 0
+                                ? 'bg-slate-800/50 border-2 border-slate-700/50 text-slate-500 cursor-not-allowed'
+                                : 'bg-indigo-600 border-2 border-indigo-500 text-white hover:bg-indigo-500 hover:-translate-y-1 hover:shadow-[0_10px_40px_-10px_rgba(79,70,229,0.6)] cursor-pointer'
                         }`}
                 >
                     <div className="flex items-center gap-3 relative z-10">

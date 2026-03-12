@@ -331,6 +331,13 @@ app.get('/api/visits', authenticateToken, async (req, res) => {
                 endDate.setMonth(endDate.getMonth() + 1);
                 endDate.setDate(0);
                 endDate.setHours(23, 59, 59, 999);
+            } else if (filterType === 'custom') {
+                const customStart = req.query.startDate as string;
+                const customEnd = req.query.endDate as string;
+                if (customStart && customEnd) {
+                    startDate = new Date(customStart + 'T00:00:00');
+                    endDate = new Date(customEnd + 'T23:59:59.999');
+                }
             }
             queryOptions.where.timestamp = { gte: startDate, lte: endDate };
         } else if (!code && !cpf && !ticketStatus) {

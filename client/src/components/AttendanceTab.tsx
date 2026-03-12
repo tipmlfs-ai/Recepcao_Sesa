@@ -93,7 +93,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ sectors }) => {
             </head>
             <body>
                <div class="ticket">
-                   <img src="/logo.png" alt="Logo">
+                   <img src="${window.location.origin}/logo.png" alt="Logo">
                    <h1>SECRETARIA MUNICIPAL DE SAÚDE</h1>
                    <p style="font-size: 10px; margin: 0;">PREFEITURA DE LAURO DE FREITAS</p>
                    
@@ -109,7 +109,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ sectors }) => {
                        <div>Data: ${data.date.toLocaleDateString('pt-BR')}</div>
                        <div>Hora: ${data.date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
                        <div style="margin-top: 10px; font-style: italic;">Aguarde ser chamado.</div>
-                   </div>
+                    </div>
                </div>
             </body>
             </html>
