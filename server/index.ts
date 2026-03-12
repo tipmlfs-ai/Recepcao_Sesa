@@ -504,19 +504,22 @@ app.patch('/api/visits/:code/checkout', authenticateToken, async (req, res) => {
     try {
         const code = req.params.code as string;
 
-        const visit = await prisma.visit.findUnique({
-            where: { code },
+        // Since codes reset daily, they are not globally unique.
+        // We find the latest ticket matching the code that is NOT finished or expired.
+        const visit = await prisma.visit.findFirst({
+            where: {
+                code,
+                ticketStatus: { in: ['WAITING', 'IN_SERVICE'] }
+            },
+            orderBy: { timestamp: 'desc' },
             include: { sector: true }
         });
 
-        if (!visit) return res.status(404).json({ error: 'Ticket não encontrado.' });
-        if (visit.ticketStatus === 'FINISHED') {
-            return res.status(400).json({ error: 'Ticket já finalizado.' });
-        }
+        if (!visit) return res.status(404).json({ error: 'Ticket não encontrado ou já finalizado.' });
 
         // Mark as finished
         const updated = await prisma.visit.update({
-            where: { code },
+            where: { id: visit.id },
             data: { ticketStatus: 'FINISHED' }
         });
 
