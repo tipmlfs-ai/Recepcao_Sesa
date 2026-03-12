@@ -83,19 +83,21 @@ export const HistoryTab: React.FC = () => {
             <html>
             <head>
                 <style>
-                    body { font-family: 'Courier New', Courier, monospace; margin: 0; padding: 10px; display: flex; justify-content: center; background: white; color: black; }
-                    .ticket { width: 260px; padding: 10px; text-align: center; }
-                    img { width: 120px; margin-bottom: 10px; }
-                    h1 { font-size: 13px; font-weight: bold; margin: 0 0 4px 0; }
-                    .divider { border-top: 1px dashed #000; margin: 8px 0; }
-                    .code { font-size: 36px; font-weight: bold; margin: 10px 0; letter-spacing: 2px; }
-                    .info { font-size: 13px; margin: 5px 0; }
-                    .citizen { font-size: 14px; font-weight: bold; margin: 8px 0; text-transform: uppercase; }
-                    .footer { font-size: 10px; margin-top: 12px; color: #333; }
+                    * { box-sizing: border-box; -webkit-print-color-adjust: exact; }
+                    body { font-family: 'Courier New', Courier, monospace; margin: 0; padding: 0; background: white; color: black; line-height: 1.2; }
+                    .ticket { width: 100%; max-width: 250px; margin: 0 auto; padding: 5px; text-align: center; overflow: hidden; }
+                    img { width: 100px; height: auto; margin-bottom: 5px; display: inline-block; }
+                    h1 { font-size: 11px; font-weight: bold; margin: 0 0 2px 0; }
+                    p.header-subtitle { font-size: 9px; margin: 0; font-weight: 500; }
+                    .divider { border-top: 1px dashed #000; margin: 5px 0; width: 100%; }
+                    .code { font-size: 32px; font-weight: bold; margin: 5px 0; letter-spacing: 1px; }
+                    .info { font-size: 11px; margin: 3px 0; }
+                    .citizen { font-size: 13px; font-weight: bold; margin: 5px 0; text-transform: uppercase; word-break: break-word; }
+                    .footer { font-size: 9px; margin-top: 8px; color: #000; }
                     @media print {
-                        @page { margin: 0; }
+                        @page { margin: 0; size: auto; }
                         body { margin: 0; padding: 0; }
-                        .ticket { border: none; }
+                        .ticket { border: none !important; width: 100%; }
                     }
                 </style>
             </head>
@@ -103,7 +105,7 @@ export const HistoryTab: React.FC = () => {
                <div class="ticket">
                    <img src="${window.location.origin}/logo.png" alt="Logo" id="logo_img">
                    <h1>SECRETARIA MUNICIPAL DE SAÚDE</h1>
-                   <p style="font-size: 10px; margin: 0; font-weight: 500;">PREFEITURA DE LAURO DE FREITAS</p>
+                   <p class="header-subtitle">PREFEITURA DE LAURO DE FREITAS</p>
                    
                    <div class="divider"></div>
                    
@@ -114,10 +116,9 @@ export const HistoryTab: React.FC = () => {
                    <div class="divider"></div>
 
                    <div class="footer">
-                       <div>Data: ${new Date(visit.timestamp).toLocaleDateString('pt-BR')}</div>
-                       <div>Hora: ${new Date(visit.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
-                       <div style="margin-top: 10px; font-style: italic; font-weight: bold;">Aguarde ser chamado.</div>
-                       <div style="margin-top: 5px; font-style: italic; font-size: 9px; font-weight: bold;">* REIMPRESSÃO *</div>
+                       <div>Data: ${new Date(visit.timestamp).toLocaleDateString('pt-BR')} ${new Date(visit.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
+                       <div style="margin-top: 5px; font-style: italic; font-weight: bold;">Aguarde ser chamado.</div>
+                       <div style="margin-top: 5px; font-style: italic; font-size: 8px; font-weight: bold;">* REIMPRESSÃO *</div>
                    </div>
                </div>
                <script>
