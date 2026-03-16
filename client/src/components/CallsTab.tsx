@@ -26,9 +26,9 @@ const CallsTab: React.FC = () => {
 
             if (res.ok) {
                 const data: CallRecord[] = await res.json();
-                // Filter all who were called today (at least IN_SERVICE or already FINISHED)
+                // Filter only those who are actively being called (IN_SERVICE)
                 const filtered = data
-                    .filter(v => (v.ticketStatus === 'IN_SERVICE' || v.ticketStatus === 'FINISHED') && v.code)
+                    .filter(v => v.ticketStatus === 'IN_SERVICE' && v.code)
                     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
                 setCalls(filtered);
             }
