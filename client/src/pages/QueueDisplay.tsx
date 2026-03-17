@@ -103,13 +103,13 @@ const QueueDisplay: React.FC = () => {
 
   // ── Derived state ──────────────────────────────────────────────────────────
   const inServiceTickets = data.tickets.filter(t => t.status === 'IN_SERVICE');
-  const heroTicket = inServiceTickets[0] ?? null;
+  
+  // Hero is the MOST RECENT (last in array ordered by timestamp asc)
+  const heroTicket = inServiceTickets.length > 0 ? inServiceTickets[inServiceTickets.length - 1] : null;
 
-  // List: all IN_SERVICE except hero + all WAITING, limited to 5-6
-  const listTickets: Ticket[] = [
-    ...inServiceTickets.slice(1),
-    ...data.tickets.filter(t => t.status === 'WAITING'),
-  ].slice(0, 6);
+  // List is everything BEFORE the hero, limited to the last 10 previous calls
+  // The server returns ASC, so we slice the part before the last element
+  const listTickets: Ticket[] = inServiceTickets.slice(Math.max(0, inServiceTickets.length - 11), -1);
 
   return (
     <div style={styles.page}>
@@ -140,13 +140,11 @@ const QueueDisplay: React.FC = () => {
         <section style={styles.heroSection}>
           {heroTicket ? (
             <div key={heroKey} style={{ ...styles.heroCard, ...(heroGlow ? styles.heroCardGlow : {}) }}>
-              <p style={styles.heroSub}>SENHA ATUAL</p>
+              <p style={styles.heroSub}>SENHA CHAMADA</p>
               <h1 style={styles.heroCode}>{heroTicket.code}</h1>
               <div style={styles.heroStatus}>
                 <div style={styles.heroDot} />
                 <span>{heroTicket.sectorName}</span>
-                <span style={styles.heroBullet}>•</span>
-                <span style={{ color: COLORS.inService }}>Em atendimento</span>
               </div>
             </div>
           ) : (
@@ -157,16 +155,17 @@ const QueueDisplay: React.FC = () => {
           )}
         </section>
 
-        {/* ── NEXT TICKETS ───────────────────────────────────────────────────── */}
+        {/* ── CALL HISTORY ───────────────────────────────────────────────────── */}
         <section style={styles.listSection}>
           <header style={styles.listHeader}>
-            <h2 style={styles.listTitle}>PRÓXIMAS SENHAS</h2>
+            <h2 style={styles.listTitle}>ÚLTIMAS CHAMADAS</h2>
           </header>
           
           <div style={styles.listContainer}>
             {listTickets.length > 0 ? (
               listTickets.map((t, idx) => {
-                const info = getTicketStatusInfo(t, idx);
+                // Info helper used for coloring/background only
+                const info = getTicketStatusInfo(t, idx); 
                 return (
                   <div
                     key={t.id}
@@ -179,12 +178,11 @@ const QueueDisplay: React.FC = () => {
                     <div style={{ ...styles.rowAccent, background: info.color }} />
                     <span style={{ ...styles.rowCode, color: info.color }}>{t.code}</span>
                     <span style={styles.rowSector}>{t.sectorName}</span>
-                    <span style={{ ...styles.rowStatus, color: info.color }}>{info.label}</span>
                   </div>
                 );
               })
             ) : (
-              <div style={styles.noQueue}>Nenhuma senha agendada</div>
+              <div style={styles.noQueue}>Nenhuma chamada anterior</div>
             )}
           </div>
         </section>
