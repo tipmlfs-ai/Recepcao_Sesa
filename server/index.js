@@ -122,15 +122,63 @@ app.get('/api/sectors/:id', async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch sector' });
     }
 });
+// --- PUBLIC QUEUE DISPLAY ENDPOINT (no auth required) ---
+app.get('/api/queue/display', async (req, res) => {
+    try {
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+        // Fetch today's active tickets (IN_SERVICE and WAITING), ordered by timestamp asc
+        const activeVisits = await prisma.visit.findMany({
+            where: {
+                ticketStatus: { in: ['IN_SERVICE', 'WAITING'] },
+                timestamp: { gte: startOfToday }
+            },
+            orderBy: { timestamp: 'asc' },
+            take: 20,
+            include: { sector: { select: { name: true } } }
+        });
+        // Calculate average service time heuristic:
+        // If we have finished visits, estimate based on total elapsed time vs finished count
+        const finishedCount = await prisma.visit.count({
+            where: {
+                ticketStatus: 'FINISHED',
+                timestamp: { gte: startOfToday }
+            }
+        });
+        let avgWaitMinutes = null;
+        if (finishedCount > 0) {
+            // Approximate: total minutes elapsed since start of day / finished count
+            const nowMs = Date.now();
+            const startMs = startOfToday.getTime();
+            const elapsedMinutes = (nowMs - startMs) / 60000;
+            avgWaitMinutes = Math.max(1, Math.round(elapsedMinutes / finishedCount));
+        }
+        const tickets = activeVisits.map(v => ({
+            id: v.id,
+            code: v.code,
+            sectorName: v.sector?.name ?? 'Geral',
+            status: v.ticketStatus,
+            timestamp: v.timestamp
+        }));
+        res.json({ tickets, avgWaitMinutes });
+    }
+    catch (error) {
+        console.error('Error fetching queue display:', error);
+        res.status(500).json({ error: 'Failed to fetch queue display data' });
+    }
+});
 // Middleware for JWT Verification
 const authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
-    if (!token)
-        return res.status(401).json({ error: 'Access denied. No token provided.' });
+    if (!token || token === 'null' || token === 'undefined') {
+        return res.status(401).json({ error: 'Access denied. Token missing or invalid (null/undefined).' });
+    }
     jsonwebtoken_1.default.verify(token, JWT_SECRET, (err, decodedUser) => {
-        if (err)
-            return res.status(403).json({ error: 'Invalid token.' });
+        if (err) {
+            console.error('[Auth] JWT Verify Error:', err.message);
+            return res.status(403).json({ error: 'Invalid token.', details: err.message });
+        }
         req.user = decodedUser;
         next();
     });
@@ -206,13 +254,9 @@ app.post('/api/visits', authenticateToken, async (req, res) => {
             update: { name, phone },
             create: { cpf, name, phone }
         });
-        // Generate unique ticket code with sector prefix
-        const startOfDay = new Date();
-        startOfDay.setHours(0, 0, 0, 0);
-        // Count visits today FOR THIS SECTOR specifically
-        const todayCount = await prisma.visit.count({
+        // Count ALL historical visits FOR THIS SECTOR specifically to make the code cumulative and unique
+        const totalCount = await prisma.visit.count({
             where: {
-                timestamp: { gte: startOfDay },
                 sectorId: sectorId
             }
         });
@@ -222,7 +266,7 @@ app.post('/api/visits', authenticateToken, async (req, res) => {
             .replace(/[^a-zA-Z]/g, '') // remove non-letters
             .substring(0, 3)
             .toUpperCase() || 'GER'; // fallback to GER if no letters
-        const ticketNum = todayCount + 1;
+        const ticketNum = totalCount + 1;
         const code = `${prefix}-${String(ticketNum).padStart(3, '0')}`;
         // Create visit
         const visit = await prisma.visit.create({
@@ -277,27 +321,48 @@ app.get('/api/visits', authenticateToken, async (req, res) => {
             const visits = await prisma.visit.findMany(queryOptions);
             return res.json(visits);
         }
-        if (date && filterType) {
-            const targetDate = new Date(date);
-            let startDate = new Date(targetDate);
-            let endDate = new Date(targetDate);
-            if (filterType === 'day') {
-                startDate.setHours(0, 0, 0, 0);
-                endDate.setHours(23, 59, 59, 999);
+        if (filterType) {
+            let startDate;
+            let endDate;
+            if (filterType === 'custom') {
+                const customStart = req.query.startDate;
+                const customEnd = req.query.endDate;
+                if (customStart && customEnd) {
+                    // Using T00:00:00 to ensure date is parsed in local time/midnight correctly
+                    startDate = new Date(customStart + 'T00:00:00');
+                    endDate = new Date(customEnd + 'T23:59:59.999');
+                }
+                else {
+                    // Fallback to today if custom range is missing params
+                    startDate = new Date();
+                    startDate.setHours(0, 0, 0, 0);
+                    endDate = new Date();
+                    endDate.setHours(23, 59, 59, 999);
+                }
             }
-            else if (filterType === 'week') {
-                const day = startDate.getDay();
-                startDate.setDate(startDate.getDate() - day);
-                startDate.setHours(0, 0, 0, 0);
-                endDate.setDate(endDate.getDate() + (6 - day));
-                endDate.setHours(23, 59, 59, 999);
-            }
-            else if (filterType === 'month') {
-                startDate.setDate(1);
-                startDate.setHours(0, 0, 0, 0);
-                endDate.setMonth(endDate.getMonth() + 1);
-                endDate.setDate(0);
-                endDate.setHours(23, 59, 59, 999);
+            else {
+                // For day, week, month, use 'date' or default to today
+                const targetDate = date ? new Date(date + 'T00:00:00') : new Date();
+                startDate = new Date(targetDate);
+                endDate = new Date(targetDate);
+                if (filterType === 'day') {
+                    startDate.setHours(0, 0, 0, 0);
+                    endDate.setHours(23, 59, 59, 999);
+                }
+                else if (filterType === 'week') {
+                    const day = startDate.getDay();
+                    startDate.setDate(startDate.getDate() - day);
+                    startDate.setHours(0, 0, 0, 0);
+                    endDate.setDate(endDate.getDate() + (6 - day));
+                    endDate.setHours(23, 59, 59, 999);
+                }
+                else if (filterType === 'month') {
+                    startDate.setDate(1);
+                    startDate.setHours(0, 0, 0, 0);
+                    endDate.setMonth(endDate.getMonth() + 1);
+                    endDate.setDate(0);
+                    endDate.setHours(23, 59, 59, 999);
+                }
             }
             queryOptions.where.timestamp = { gte: startDate, lte: endDate };
         }
@@ -451,13 +516,14 @@ app.patch('/api/visits/:code/checkout', authenticateToken, async (req, res) => {
             include: { sector: true }
         });
         if (!visit)
-            return res.status(404).json({ error: 'Ticket não encontrado.' });
-        if (visit.ticketStatus === 'FINISHED') {
-            return res.status(400).json({ error: 'Ticket já finalizado.' });
-        }
+            return res.status(404).json({ error: `Ticket [${code}] não encontrado no banco de dados.` });
+        if (visit.ticketStatus === 'FINISHED')
+            return res.status(400).json({ error: `Ticket [${code}] já foi finalizado anteriormente.` });
+        if (visit.ticketStatus === 'EXPIRED')
+            return res.status(400).json({ error: `Ticket [${code}] expirou por ser de um dia anterior.` });
         // Mark as finished
         const updated = await prisma.visit.update({
-            where: { code },
+            where: { id: visit.id },
             data: { ticketStatus: 'FINISHED' }
         });
         // Decrement sector queue

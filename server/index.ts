@@ -132,6 +132,57 @@ app.get('/api/sectors/:id', async (req, res) => {
     }
 });
 
+// --- PUBLIC QUEUE DISPLAY ENDPOINT (no auth required) ---
+
+app.get('/api/queue/display', async (req, res) => {
+    try {
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+
+        // Fetch today's active tickets (IN_SERVICE and WAITING), ordered by timestamp asc
+        const activeVisits = await prisma.visit.findMany({
+            where: {
+                ticketStatus: { in: ['IN_SERVICE', 'WAITING'] },
+                timestamp: { gte: startOfToday }
+            },
+            orderBy: { timestamp: 'asc' },
+            take: 20,
+            include: { sector: { select: { name: true } } }
+        });
+
+        // Calculate average service time heuristic:
+        // If we have finished visits, estimate based on total elapsed time vs finished count
+        const finishedCount = await prisma.visit.count({
+            where: {
+                ticketStatus: 'FINISHED',
+                timestamp: { gte: startOfToday }
+            }
+        });
+
+        let avgWaitMinutes: number | null = null;
+        if (finishedCount > 0) {
+            // Approximate: total minutes elapsed since start of day / finished count
+            const nowMs = Date.now();
+            const startMs = startOfToday.getTime();
+            const elapsedMinutes = (nowMs - startMs) / 60000;
+            avgWaitMinutes = Math.max(1, Math.round(elapsedMinutes / finishedCount));
+        }
+
+        const tickets = activeVisits.map(v => ({
+            id: v.id,
+            code: v.code,
+            sectorName: v.sector?.name ?? 'Geral',
+            status: v.ticketStatus,
+            timestamp: v.timestamp
+        }));
+
+        res.json({ tickets, avgWaitMinutes });
+    } catch (error) {
+        console.error('Error fetching queue display:', error);
+        res.status(500).json({ error: 'Failed to fetch queue display data' });
+    }
+});
+
 // Middleware for JWT Verification
 const authenticateToken = (req: Request, res: Response, next: NextFunction) => {
     const authHeader = req.headers['authorization'];

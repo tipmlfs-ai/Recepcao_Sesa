@@ -3,6 +3,7 @@ import Dashboard from './pages/Dashboard';
 import Controller from './pages/Controller';
 import Login from './pages/Login';
 import Admin from './pages/Admin';
+import QueueDisplay from './pages/QueueDisplay';
 import { AuthProvider } from './contexts/AuthContext';
 import { PrivateRoute, ReceptionRoute, SectorRoute, AdminRoute } from './routes/PrivateRoute';
 import './index.css';
@@ -14,6 +15,7 @@ function App() {
         <div className="app-container">
           <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/fila" element={<QueueDisplay />} />
 
             {/* Protected Routes */}
             <Route element={<PrivateRoute />}>

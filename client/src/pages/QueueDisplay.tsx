@@ -1,0 +1,473 @@
+import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { Link } from 'react-router-dom';
+import { API_URL, SOCKET_URL } from '../config/apiConfig';
+import { io, Socket } from 'socket.io-client';
+
+// ── Types ────────────────────────────────────────────────────────────────────
+interface Ticket {
+  id: string;
+  code: string;
+  sectorName: string;
+  status: 'IN_SERVICE' | 'WAITING';
+  timestamp: string;
+}
+
+interface DisplayData {
+  tickets: Ticket[];
+  avgWaitMinutes: number | null;
+}
+
+// ── Constants ───────────────────────────────────────────────────────────────
+const COLORS = {
+  background: '#0F172A',
+  white: '#FFFFFF',
+  inService: '#22C55E',
+  next: '#F59E0B',
+  waiting: '#94A3B8',
+  border: 'rgba(255,255,255,0.08)',
+  cardBg: 'rgba(255,255,255,0.03)',
+};
+
+// ── Helper to determine ticket visual status ────────────────────────────────
+const getTicketStatusInfo = (ticket: Ticket, indexInList: number) => {
+  if (ticket.status === 'IN_SERVICE') {
+    return { label: 'Em atendimento', color: COLORS.inService, bg: 'rgba(34,197,94,0.1)' };
+  }
+  if (indexInList < 2) {
+    return { label: 'Próximo', color: COLORS.next, bg: 'rgba(245,158,11,0.1)' };
+  }
+  return { label: 'Aguardando', color: COLORS.waiting, bg: 'rgba(148,163,184,0.05)' };
+};
+
+// ── Component ─────────────────────────────────────────────────────────────────
+const QueueDisplay: React.FC = () => {
+  const [data, setData] = useState<DisplayData>({ tickets: [], avgWaitMinutes: null });
+  const [clock, setClock] = useState('');
+  const [heroKey, setHeroKey] = useState(0);
+  const [heroGlow, setHeroGlow] = useState(false);
+  const prevHeroCode = useRef<string | null>(null);
+  const socketRef = useRef<Socket | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ── Clock ──────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    const tick = () => {
+      const now = new Date();
+      setClock(now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  // ── Fetch queue data ───────────────────────────────────────────────────────
+  const fetchData = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/queue/display`);
+      if (!res.ok) return;
+      const json: DisplayData = await res.json();
+
+      // Filter tickets to only include relevant ones: IN_SERVICE or WAITING
+      const filteredTickets = json.tickets.filter(t => t.status === 'IN_SERVICE' || t.status === 'WAITING');
+
+      // Detect hero change (first IN_SERVICE ticket)
+      const newHero = filteredTickets.find(t => t.status === 'IN_SERVICE');
+      if (newHero && newHero.code !== prevHeroCode.current) {
+        prevHeroCode.current = newHero.code;
+        setHeroKey(k => k + 1);
+        setHeroGlow(true);
+        setTimeout(() => setHeroGlow(false), 3000);
+      } else if (!newHero) {
+        prevHeroCode.current = null;
+      }
+      
+      setData({ ...json, tickets: filteredTickets });
+    } catch (_) {}
+  }, []);
+
+  // ── Socket.IO ─────────────────────────────────────────────────────────────
+  useEffect(() => {
+    fetchData();
+    pollRef.current = setInterval(fetchData, 10000);
+
+    const socket = io(SOCKET_URL, { transports: ['websocket', 'polling'] });
+    socketRef.current = socket;
+    socket.on('status_changed', () => fetchData());
+    socket.on('queue_reset', () => fetchData());
+
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+      socket.disconnect();
+    };
+  }, [fetchData]);
+
+  // ── Derived state ──────────────────────────────────────────────────────────
+  const inServiceTickets = data.tickets.filter(t => t.status === 'IN_SERVICE');
+  const heroTicket = inServiceTickets[0] ?? null;
+
+  // List: all IN_SERVICE except hero + all WAITING, limited to 5-6
+  const listTickets: Ticket[] = [
+    ...inServiceTickets.slice(1),
+    ...data.tickets.filter(t => t.status === 'WAITING'),
+  ].slice(0, 6);
+
+  return (
+    <div style={styles.page}>
+      {/* ── HEADER ─────────────────────────────────────────────────────────── */}
+      <header style={styles.header}>
+        <div style={styles.headerLeft}>
+          <img src="/logo.png" alt="Logo" style={styles.logo} onError={e => { (e.target as HTMLImageElement).style.visibility = 'hidden'; }} />
+          <div style={styles.logoDivider} />
+          <span style={styles.headerTitle}>SESA · CAF</span>
+        </div>
+
+        <div style={styles.headerCenter}>
+          <div style={styles.avgContainer}>
+            <span style={styles.avgLabel}>Tempo médio de espera</span>
+            <span style={styles.avgValue}>
+              {data.avgWaitMinutes !== null ? `${data.avgWaitMinutes} min` : '-- min'}
+            </span>
+          </div>
+        </div>
+
+        <div style={styles.headerRight}>
+          <div style={styles.clock}>{clock}</div>
+        </div>
+      </header>
+
+      {/* ── HERO TICKET ────────────────────────────────────────────────────── */}
+      <main style={styles.main}>
+        <section style={styles.heroSection}>
+          {heroTicket ? (
+            <div key={heroKey} style={{ ...styles.heroCard, ...(heroGlow ? styles.heroCardGlow : {}) }}>
+              <p style={styles.heroSub}>SENHA ATUAL</p>
+              <h1 style={styles.heroCode}>{heroTicket.code}</h1>
+              <div style={styles.heroStatus}>
+                <div style={styles.heroDot} />
+                <span>{heroTicket.sectorName}</span>
+                <span style={styles.heroBullet}>•</span>
+                <span style={{ color: COLORS.inService }}>Em atendimento</span>
+              </div>
+            </div>
+          ) : (
+            <div style={styles.emptyState}>
+              <div style={styles.emptyIcon}>⏳</div>
+              <p style={styles.emptyText}>Aguardando próxima chamada</p>
+            </div>
+          )}
+        </section>
+
+        {/* ── NEXT TICKETS ───────────────────────────────────────────────────── */}
+        <section style={styles.listSection}>
+          <header style={styles.listHeader}>
+            <h2 style={styles.listTitle}>PRÓXIMAS SENHAS</h2>
+          </header>
+          
+          <div style={styles.listContainer}>
+            {listTickets.length > 0 ? (
+              listTickets.map((t, idx) => {
+                const info = getTicketStatusInfo(t, idx);
+                return (
+                  <div
+                    key={t.id}
+                    style={{
+                      ...styles.listRow,
+                      animationDelay: `${idx * 100}ms`,
+                      background: info.bg,
+                    }}
+                  >
+                    <div style={{ ...styles.rowAccent, background: info.color }} />
+                    <span style={{ ...styles.rowCode, color: info.color }}>{t.code}</span>
+                    <span style={styles.rowSector}>{t.sectorName}</span>
+                    <span style={{ ...styles.rowStatus, color: info.color }}>{info.label}</span>
+                  </div>
+                );
+              })
+            ) : (
+              <div style={styles.noQueue}>Nenhuma senha agendada</div>
+            )}
+          </div>
+        </section>
+      </main>
+
+      {/* ── FOOTER LEGEND ──────────────────────────────────────────────────── */}
+      <footer style={styles.footer}>
+        <div style={styles.legend}>
+          <span style={styles.legendItem}><strong>A</strong> Geral</span>
+          <span style={styles.legendSep}>|</span>
+          <span style={styles.legendItem}><strong>P</strong> Prioritário</span>
+          <span style={styles.legendSep}>|</span>
+          <span style={styles.legendItem}><strong>B</strong> Outros</span>
+        </div>
+        
+        <Link to="/login" style={styles.backBtn}>Acesso Restrito</Link>
+      </footer>
+
+      {/* ── STYLES ─────────────────────────────────────────────────────────── */}
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+
+        body { margin: 0; background: ${COLORS.background}; overflow: hidden; }
+
+        @keyframes heroPulse {
+          0% { transform: scale(1.05); opacity: 0; }
+          10% { transform: scale(1); opacity: 1; }
+          100% { transform: scale(1); opacity: 1; }
+        }
+
+        @keyframes cardGlow {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); }
+          50% { box-shadow: 0 0 100px 20px rgba(34,197,94,0.15); }
+        }
+
+        @keyframes slideIn {
+          from { transform: translateX(30px); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
+        }
+
+        @keyframes activeDot {
+          0%, 100% { transform: scale(1); opacity: 1; }
+          50% { transform: scale(1.4); opacity: 0.6; }
+        }
+      `}</style>
+    </div>
+  );
+};
+
+const styles: Record<string, React.CSSProperties> = {
+  page: {
+    width: '100vw',
+    height: '100vh',
+    background: COLORS.background,
+    color: '#F8FAFC',
+    fontFamily: "'Inter', sans-serif",
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
+    userSelect: 'none',
+  },
+  header: {
+    height: '100px',
+    padding: '0 60px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderBottom: `1px solid ${COLORS.border}`,
+    background: 'rgba(255,255,255,0.01)',
+  },
+  headerLeft: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '24px',
+  },
+  logo: {
+    height: '48px',
+  },
+  logoDivider: {
+    width: '1px',
+    height: '32px',
+    background: COLORS.border,
+  },
+  headerTitle: {
+    fontSize: '20px',
+    fontWeight: 700,
+    letterSpacing: '2px',
+    color: '#94A3B8',
+  },
+  headerCenter: {
+    textAlign: 'center',
+  },
+  avgContainer: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+  },
+  avgLabel: {
+    fontSize: '12px',
+    textTransform: 'uppercase',
+    letterSpacing: '1px',
+    color: '#64748B',
+  },
+  avgValue: {
+    fontSize: '18px',
+    fontWeight: 600,
+    color: '#CBD5E1',
+  },
+  headerRight: {
+    textAlign: 'right',
+  },
+  clock: {
+    fontSize: '32px',
+    fontWeight: 700,
+    letterSpacing: '1px',
+    color: COLORS.white,
+    fontVariantNumeric: 'tabular-nums',
+  },
+  main: {
+    flex: 1,
+    display: 'flex',
+    padding: '40px 60px',
+    gap: '60px',
+    overflow: 'hidden',
+  },
+  heroSection: {
+    flex: '1.4',
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'center',
+  },
+  heroCard: {
+    background: 'rgba(255,255,255,0.02)',
+    border: `1px solid ${COLORS.border}`,
+    borderRadius: '40px',
+    padding: '80px 40px',
+    textAlign: 'center',
+    animation: 'heroPulse 3s cubic-bezier(0.16, 1, 0.3, 1)',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  heroCardGlow: {
+    animation: 'heroPulse 3s cubic-bezier(0.16, 1, 0.3, 1), cardGlow 3s ease-in-out',
+    borderColor: 'rgba(34,197,94,0.3)',
+  },
+  heroSub: {
+    fontSize: '16px',
+    fontWeight: 600,
+    letterSpacing: '6px',
+    color: '#64748B',
+    marginBottom: '24px',
+    textTransform: 'uppercase',
+  },
+  heroCode: {
+    fontSize: '180px',
+    fontWeight: 900,
+    lineHeight: '0.9',
+    margin: 0,
+    color: COLORS.white,
+    letterSpacing: '-4px',
+    textShadow: '0 10px 40px rgba(0,0,0,0.5)',
+  },
+  heroStatus: {
+    marginTop: '48px',
+    fontSize: '32px',
+    fontWeight: 500,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '16px',
+    color: '#CBD5E1',
+  },
+  heroDot: {
+    width: '12px',
+    height: '12px',
+    borderRadius: '50%',
+    background: COLORS.inService,
+    boxShadow: `0 0 15px ${COLORS.inService}`,
+    animation: 'activeDot 1.5s infinite',
+  },
+  heroBullet: {
+    color: '#334155',
+  },
+  emptyState: {
+    textAlign: 'center',
+    opacity: 0.3,
+  },
+  emptyIcon: { fontSize: '80px', marginBottom: '20px' },
+  emptyText: { fontSize: '24px', fontWeight: 500 },
+
+  listSection: {
+    flex: '1',
+    display: 'flex',
+    flexDirection: 'column',
+    background: 'rgba(255,255,255,0.01)',
+    borderRadius: '30px',
+    padding: '30px',
+    border: `1px solid ${COLORS.border}`,
+  },
+  listHeader: {
+    marginBottom: '30px',
+    paddingLeft: '10px',
+  },
+  listTitle: {
+    fontSize: '14px',
+    fontWeight: 700,
+    letterSpacing: '3px',
+    color: '#475569',
+    margin: 0,
+  },
+  listContainer: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+    flex: 1,
+    overflow: 'hidden',
+  },
+  listRow: {
+    display: 'flex',
+    alignItems: 'center',
+    padding: '24px 28px',
+    borderRadius: '20px',
+    border: `1px solid ${COLORS.border}`,
+    animation: 'slideIn 0.5s ease-out both',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  rowAccent: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: '6px',
+  },
+  rowCode: {
+    fontSize: '32px',
+    fontWeight: 800,
+    width: '120px',
+  },
+  rowSector: {
+    fontSize: '18px',
+    fontWeight: 500,
+    color: '#94A3B8',
+    flex: 1,
+  },
+  rowStatus: {
+    fontSize: '14px',
+    fontWeight: 700,
+    textTransform: 'uppercase',
+    letterSpacing: '1px',
+  },
+  noQueue: {
+    textAlign: 'center',
+    padding: '40px',
+    color: '#334155',
+    fontStyle: 'italic',
+  },
+  footer: {
+    height: '60px',
+    padding: '0 60px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderTop: `1px solid ${COLORS.border}`,
+    background: 'rgba(0,0,0,0.2)',
+  },
+  legend: {
+    display: 'flex',
+    gap: '24px',
+    fontSize: '13px',
+    color: '#475569',
+  },
+  legendItem: {
+    display: 'flex',
+    gap: '8px',
+  },
+  legendSep: { opacity: 0.2 },
+  backBtn: {
+    fontSize: '11px',
+    color: '#1E293B',
+    textDecoration: 'none',
+    transition: 'color 0.2s',
+  },
+};
+
+export default QueueDisplay;

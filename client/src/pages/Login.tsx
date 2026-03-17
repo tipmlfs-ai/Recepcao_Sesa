@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Lock } from 'lucide-react';
 import { API_URL } from '../config/apiConfig';
@@ -123,6 +123,17 @@ const Login: React.FC = () => {
                         </button>
                     </form>
                 </div>
+            </div>
+
+            {/* Discrete link to public queue display */}
+            <div className="mt-6 text-center">
+                <Link
+                    to="/fila"
+                    className="text-slate-600 hover:text-slate-400 text-xs transition-colors duration-200 flex items-center justify-center gap-1.5"
+                >
+                    <span>📺</span>
+                    <span>Ver Painel de Chamadas</span>
+                </Link>
             </div>
         </div>
     );
