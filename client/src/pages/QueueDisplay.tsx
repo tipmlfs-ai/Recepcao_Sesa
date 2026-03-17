@@ -107,9 +107,8 @@ const QueueDisplay: React.FC = () => {
   // Hero is the MOST RECENT (last in array ordered by timestamp asc)
   const heroTicket = inServiceTickets.length > 0 ? inServiceTickets[inServiceTickets.length - 1] : null;
 
-  // List is everything BEFORE the hero, limited to the last 10 previous calls
-  // The server returns ASC, so we slice the part before the last element
-  const listTickets: Ticket[] = inServiceTickets.slice(Math.max(0, inServiceTickets.length - 11), -1);
+  // List is everything BEFORE the hero, limited to the last 12 previous calls
+  const listTickets: Ticket[] = inServiceTickets.slice(Math.max(0, inServiceTickets.length - 13), -1);
 
   return (
     <div style={styles.page}>
@@ -155,29 +154,27 @@ const QueueDisplay: React.FC = () => {
           )}
         </section>
 
-        {/* ── CALL HISTORY ───────────────────────────────────────────────────── */}
+        {/* ── CALL HISTORY GRID ──────────────────────────────────────────────── */}
         <section style={styles.listSection}>
           <header style={styles.listHeader}>
             <h2 style={styles.listTitle}>ÚLTIMAS CHAMADAS</h2>
           </header>
           
-          <div style={styles.listContainer}>
+          <div style={styles.gridContainer}>
             {listTickets.length > 0 ? (
               listTickets.map((t, idx) => {
-                // Info helper used for coloring/background only
                 const info = getTicketStatusInfo(t, idx); 
                 return (
                   <div
                     key={t.id}
                     style={{
-                      ...styles.listRow,
-                      animationDelay: `${idx * 100}ms`,
-                      background: info.bg,
+                      ...styles.gridItem,
+                      animationDelay: `${idx * 80}ms`,
+                      background: 'rgba(255,255,255,0.03)',
+                      borderColor: 'rgba(255,255,255,0.08)',
                     }}
                   >
-                    <div style={{ ...styles.rowAccent, background: info.color }} />
-                    <span style={{ ...styles.rowCode, color: info.color }}>{t.code}</span>
-                    <span style={styles.rowSector}>{t.sectorName}</span>
+                    <span style={{ ...styles.gridCode, color: info.color }}>{t.code}</span>
                   </div>
                 );
               })
@@ -218,9 +215,9 @@ const QueueDisplay: React.FC = () => {
           50% { box-shadow: 0 0 100px 20px rgba(34,197,94,0.15); }
         }
 
-        @keyframes slideIn {
-          from { transform: translateX(30px); opacity: 0; }
-          to { transform: translateX(0); opacity: 1; }
+        @keyframes itemFadeIn {
+          from { transform: scale(0.9); opacity: 0; }
+          to { transform: scale(1); opacity: 1; }
         }
 
         @keyframes activeDot {
@@ -393,45 +390,26 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#475569',
     margin: 0,
   },
-  listContainer: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '12px',
+  gridContainer: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+    gap: '16px',
     flex: 1,
-    overflow: 'hidden',
+    overflow: 'auto',
+    paddingRight: '10px',
   },
-  listRow: {
+  gridItem: {
+    height: '140px',
     display: 'flex',
     alignItems: 'center',
-    padding: '24px 28px',
-    borderRadius: '20px',
-    border: `1px solid ${COLORS.border}`,
-    animation: 'slideIn 0.5s ease-out both',
-    position: 'relative',
-    overflow: 'hidden',
+    justifyContent: 'center',
+    borderRadius: '24px',
+    border: '1px solid',
+    animation: 'itemFadeIn 0.5s ease-out both',
   },
-  rowAccent: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: '6px',
-  },
-  rowCode: {
+  gridCode: {
     fontSize: '32px',
     fontWeight: 800,
-    width: '120px',
-  },
-  rowSector: {
-    fontSize: '18px',
-    fontWeight: 500,
-    color: '#94A3B8',
-    flex: 1,
-  },
-  rowStatus: {
-    fontSize: '14px',
-    fontWeight: 700,
-    textTransform: 'uppercase',
     letterSpacing: '1px',
   },
   noQueue: {
