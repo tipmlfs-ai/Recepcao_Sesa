@@ -1,6 +1,4 @@
 import express, { Request, Response, NextFunction } from 'express';
-import { createServer } from 'http';
-import { Server } from 'socket.io';
 import cors from 'cors';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
@@ -9,13 +7,6 @@ import jwt from 'jsonwebtoken';
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key-change-in-production';
 
 const app = express();
-const httpServer = createServer(app);
-const io = new Server(httpServer, {
-    cors: {
-        origin: '*',
-        methods: ['GET', 'POST'],
-    },
-});
 
 const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3001;
@@ -80,7 +71,6 @@ app.use(async (req, res, next) => {
                 }
 
                 console.log('[Daily Reset] Filas zeradas e recalibradas perfeitamente para o dia de hoje.');
-                io.emit('queue_reset');
             }
         } catch (error) {
             console.error('[Daily Reset] Erro:', error);
@@ -642,70 +632,6 @@ app.patch('/api/sectors/:id/queue', authenticateToken, async (req, res) => {
     }
 });
 
-// Socket.io for Real-Time Status Updates (legacy - kept for reference)
-io.on('connection', (socket) => {
-    console.log('Client connected:', socket.id);
-
-    // When a controller updates the status
-    socket.on('update_status', async (data) => {
-        try {
-            const { sectorId, status } = data;
-
-            const updatedSector = await prisma.sector.update({
-                where: { id: sectorId },
-                data: { status },
-            });
-
-            // Broadcast the change to ALL connected clients (especially the Reception Dashboard)
-            io.emit('status_changed', updatedSector);
-
-            console.log(`[Status Updated] ${updatedSector.name} -> ${updatedSector.status}`);
-        } catch (error) {
-            console.error('Error updating status:', error);
-            socket.emit('error', { message: 'Failed to update status' });
-        }
-    });
-
-    // When reception updates the queue count
-    socket.on('update_queue', async (data) => {
-        try {
-            const { sectorId, action } = data;
-
-            const currentSector = await prisma.sector.findUnique({
-                where: { id: sectorId },
-            });
-
-            if (!currentSector) return;
-
-            let newCount = currentSector.queueCount;
-            if (action === 'add') {
-                newCount++;
-            } else if (action === 'remove' && newCount > 0) {
-                newCount--;
-            } else {
-                return; // Do nothing if it's below 0 or unsupported action
-            }
-
-            const updatedSector = await prisma.sector.update({
-                where: { id: sectorId },
-                data: { queueCount: newCount },
-            });
-
-            // Re-use status_changed to push the entire row update
-            io.emit('status_changed', updatedSector);
-
-            console.log(`[Queue Updated] ${updatedSector.name} -> Queue: ${updatedSector.queueCount}`);
-        } catch (error) {
-            console.error('Error updating queue:', error);
-            socket.emit('error', { message: 'Failed to update queue' });
-        }
-    });
-
-    socket.on('disconnect', () => {
-        console.log('Client disconnected:', socket.id);
-    });
-});
-
-httpServer.listen(PORT, () => {
+app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
 });
