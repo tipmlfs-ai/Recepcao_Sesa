@@ -547,6 +547,12 @@ app.post('/api/sectors/:id/call-next', authenticateToken, async (req, res) => {
             include: { citizen: true, sector: true }
         });
 
+        // Decrement sector queue count since the person is no longer waiting
+        await prisma.sector.update({
+            where: { id: sectorId },
+            data: { queueCount: { decrement: 1 } }
+        });
+
         res.json(updatedVisit);
     } catch (error) {
         console.error('Error calling next:', error);
@@ -571,12 +577,6 @@ app.patch('/api/visits/:code/checkout', authenticateToken, async (req, res) => {
         const updated = await prisma.visit.update({
             where: { id: visit.id },
             data: { ticketStatus: 'FINISHED' }
-        });
-
-        // Decrement sector queue
-        await prisma.sector.update({
-            where: { id: visit.sectorId },
-            data: { queueCount: { decrement: 1 } }
         });
 
         res.json(updated);
