@@ -54,7 +54,7 @@ async function getFilteredVisits(req: Request) {
                 endDate.setHours(23, 59, 59, 999);
             }
         } else {
-            const targetDate = date ? new Date(date as string + 'T00:00:00') : new Date();
+            const targetDate = date ? new Date(date as string) : new Date();
             startDate = new Date(targetDate);
             endDate = new Date(targetDate);
 

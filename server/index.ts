@@ -371,7 +371,7 @@ app.get('/api/visits', authenticateToken, async (req, res) => {
                 }
             } else {
                 // For day, week, month, use 'date' or default to today
-                const targetDate = date ? new Date(date as string + 'T00:00:00') : new Date();
+                const targetDate = date ? new Date(date as string) : new Date();
                 startDate = new Date(targetDate);
                 endDate = new Date(targetDate);
 
