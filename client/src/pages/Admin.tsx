@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { Users, LogOut, Plus, Trash2, KeyRound } from 'lucide-react';
+import { Users, LogOut, Plus, Trash2, KeyRound, BarChart3 } from 'lucide-react';
 import { API_URL } from '../config/apiConfig';
 
 interface Sector {
@@ -172,11 +172,14 @@ const Admin: React.FC = () => {
                     <Users className="w-6 h-6 text-blue-400" />
                     <h1 className="text-xl font-bold">Painel de TI - Gestão de Acessos</h1>
                 </div>
-                <div className="flex items-center gap-4">
-                    <button onClick={() => setIsCreating(true)} className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 text-sm">
+                <div className="flex flex-wrap items-center gap-4 mt-4 sm:mt-0">
+                    <button onClick={() => navigate('/admin/analytics')} className="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 text-sm text-white">
+                        <BarChart3 className="w-4 h-4" /> Data Analytics
+                    </button>
+                    <button onClick={() => setIsCreating(true)} className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 text-sm text-white">
                         <Plus className="w-4 h-4" /> Novo Usuário
                     </button>
-                    <button onClick={handleLogout} className="flex items-center gap-2 hover:text-red-400 font-medium transition-colors">
+                    <button onClick={handleLogout} className="flex items-center gap-2 hover:text-red-400 font-medium transition-colors text-white">
                         Sair <LogOut className="w-5 h-5" />
                     </button>
                 </div>

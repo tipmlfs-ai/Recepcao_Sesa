@@ -11,12 +11,14 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.99.0",
+    "date-fns": "^4.1.0",
     "jwt-decode": "^4.0.0",
     "lucide-react": "^0.576.0",
     "puppeteer": "^24.38.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.13.1",
+    "recharts": "^3.8.0",
     "socket.io-client": "^4.8.3",
     "sonner": "^2.0.7"
   },

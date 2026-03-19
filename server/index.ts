@@ -3,11 +3,10 @@ import cors from 'cors';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import exportRoutes from './exportRoutes';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key-change-in-production';
-
 const app = express();
-
 const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3001;
 
@@ -632,6 +631,7 @@ app.patch('/api/sectors/:id/queue', authenticateToken, async (req, res) => {
     }
 });
 
+app.use('/api/export', authenticateToken, exportRoutes);
 app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
 });

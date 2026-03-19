@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Search, BarChart3, Users, Calendar, Clock, Filter, Phone, Hash } from 'lucide-react';
+import { X, Search, BarChart3, Users, Calendar, Clock, Filter, Phone, Hash, Download, FileText, FileSpreadsheet, Mail, ChevronDown } from 'lucide-react';
 import { API_URL } from '../config/apiConfig';
 import { toast } from 'sonner';
 
@@ -29,6 +29,7 @@ export const SectorDashboardModal: React.FC<SectorDashboardModalProps> = ({ isOp
     const [filterType, setFilterType] = useState('all'); // all, cpf, name, phone
     const [visits, setVisits] = useState<VisitData[]>([]);
     const [loading, setLoading] = useState(false);
+    const [exportMenuOpen, setExportMenuOpen] = useState(false);
 
     // Date Range State
     const [startDate, setStartDate] = useState('');
@@ -128,6 +129,27 @@ export const SectorDashboardModal: React.FC<SectorDashboardModalProps> = ({ isOp
         setEndDate('');
         setIsCustomDateApplied(false);
         fetchHistoryData(false); // fetch default month back
+    };
+
+    const getExportUrl = (type: 'pdf' | 'xlsx') => {
+        let url = `${API_URL}/api/export/${type}?sectorId=${sectorId}`;
+        if (isCustomDateApplied && startDate && endDate) {
+            url += `&filterType=custom&startDate=${startDate}&endDate=${endDate}`;
+        } else {
+            url += `&filterType=month&date=${new Date().toISOString()}`;
+        }
+        return url;
+    };
+
+    const handleExport = (type: 'pdf' | 'xlsx') => {
+        setExportMenuOpen(false);
+        window.open(getExportUrl(type), '_blank');
+        toast.success(`Exportação ${type.toUpperCase()} iniciada!`);
+    };
+
+    const handleScheduleEmail = () => {
+        setExportMenuOpen(false);
+        toast.info("A funcionalidade de agendamento por e-mail está em prévia e será lançada na próxima versão.");
     };
 
     if (!isOpen) return null;
@@ -250,6 +272,42 @@ export const SectorDashboardModal: React.FC<SectorDashboardModalProps> = ({ isOp
                                         <X className="w-4 h-4" />
                                     </button>
                                 )}
+                                
+                                {/* Export Dropdown */}
+                                <div className="relative ml-auto md:ml-4">
+                                    <button
+                                        onClick={() => setExportMenuOpen(!exportMenuOpen)}
+                                        className="flex items-center gap-2 px-4 py-2.5 bg-indigo-500/10 border border-indigo-500/50 hover:bg-indigo-500/20 text-indigo-300 font-bold rounded-lg transition-all"
+                                    >
+                                        <Download className="w-4 h-4" /> Exportar Relatório <ChevronDown className="w-4 h-4" />
+                                    </button>
+                                    
+                                    {exportMenuOpen && (
+                                        <div className="absolute right-0 top-full mt-2 w-64 bg-slate-800 border border-slate-600 rounded-xl shadow-2xl z-50 overflow-hidden">
+                                            <button 
+                                                onClick={() => handleExport('pdf')}
+                                                className="w-full text-left px-4 py-3 hover:bg-slate-700 flex items-center gap-3 text-slate-200 font-medium border-b border-slate-700 transition-colors"
+                                            >
+                                                <div className="bg-red-500/20 p-2 rounded-lg border border-red-500/30"><FileText className="w-4 h-4 text-red-400" /></div>
+                                                PDF Premium
+                                            </button>
+                                            <button 
+                                                onClick={() => handleExport('xlsx')}
+                                                className="w-full text-left px-4 py-3 hover:bg-slate-700 flex items-center gap-3 text-slate-200 font-medium border-b border-slate-700 transition-colors"
+                                            >
+                                                <div className="bg-emerald-500/20 p-2 rounded-lg border border-emerald-500/30"><FileSpreadsheet className="w-4 h-4 text-emerald-400" /></div>
+                                                XLSX Inteligente
+                                            </button>
+                                            <button 
+                                                onClick={handleScheduleEmail}
+                                                className="w-full text-left px-4 py-3 hover:bg-slate-700 flex items-center gap-3 text-slate-300 font-medium transition-colors"
+                                            >
+                                                <div className="bg-blue-500/20 p-2 rounded-lg border border-blue-500/30"><Mail className="w-4 h-4 text-blue-400" /></div>
+                                                Agendar envio por e-mail
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
 
