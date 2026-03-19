@@ -164,22 +164,47 @@ router.get('/xlsx', async (req, res) => {
 });
 
 // PDF Premium
+// PDF Premium E Resiliente
 router.get('/pdf', async (req, res) => {
     try {
-        const visits = await getFilteredVisits(req);
+        console.log(`[PDF Export] Início da geração do PDF para a query:`, req.query);
+
+        // 1. Coleta de dados com fallback de segurança
+        let visits;
+        try {
+            visits = await getFilteredVisits(req);
+        } catch (dbErr: any) {
+            console.error(`[PDF Export] Erro ocorrido na busca do Banco de Dados:`, dbErr.message);
+            return res.status(500).json({ error: 'Falha ao buscar dados no banco', details: dbErr.message });
+        }
+
+        // 2. Validação de dados ausentes - Proteção contra quebras
+        if (!visits || visits.length === 0) {
+            console.warn(`[PDF Export] Nenhum dado retornado para a query informada.`);
+            return res.status(404).json({ error: 'Nenhum dado encontrado com os filtros informados.' });
+        }
+
         const sectorName = req.query.sectorId ? (visits[0] as any)?.sector?.name || 'Setor' : 'Visão Geral';
 
-        const fonts = {
-            Helvetica: {
-                normal: 'Helvetica',
-                bold: 'Helvetica-Bold',
-                italics: 'Helvetica-Oblique',
-                bolditalics: 'Helvetica-BoldOblique'
-            }
-        };
+        // 3. Setup nativo do PdfMake isolado em try/catch para erros de CommonJS ou Path de Fonte
+        let printer;
+        try {
+            const fonts = {
+                Helvetica: {
+                    normal: 'Helvetica',
+                    bold: 'Helvetica-Bold',
+                    italics: 'Helvetica-Oblique',
+                    bolditalics: 'Helvetica-BoldOblique'
+                }
+            };
+            const PdfPrinter = require('pdfmake');
+            printer = new PdfPrinter(fonts);
+        } catch (importError: any) {
+            console.error(`[PDF Export] Erro crítico de inicialização do gerador PDFMake:`, importError.message);
+            return res.status(500).json({ error: 'Erro de dependência do motor de PDF na Vercel.' });
+        }
 
-        const printer = new (PdfPrinter as any)(fonts);
-
+        // 4. Construção de Tabela com Fallbacks de Data Vazio
         const tableBody: any[] = [
             [
                 { text: 'Data/Hora', style: 'tableHeader' },
@@ -194,15 +219,25 @@ router.get('/pdf', async (req, res) => {
             const isEven = index % 2 === 0;
             const fillColor = isEven ? '#f8fafc' : '#ffffff';
             
+            // Garantir datas válidas evitando Exceptions do date-fns
+            const printDate = (v.timestamp instanceof Date && !isNaN(v.timestamp.valueOf()))
+                ? format(v.timestamp, 'dd/MM/yyyy HH:mm') 
+                : '-';
+            
             tableBody.push([
-                { text: format(v.timestamp, 'dd/MM/yyyy HH:mm'), fillColor, fontSize: 10 },
+                { text: printDate, fillColor, fontSize: 10 },
                 { text: v.code || '-', fillColor, fontSize: 10 },
                 { text: v.ticketStatus || '-', fillColor, fontSize: 10 },
-                { text: v.citizen?.name || '-', fillColor, fontSize: 10 },
-                { text: v.sector?.name || '-', fillColor, fontSize: 10 }
+                { text: v.citizen?.name || 'Anônimo', fillColor, fontSize: 10 },
+                { text: v.sector?.name || 'Geral', fillColor, fontSize: 10 }
             ]);
         });
 
+        // Contadores Seguros
+        const finishedCount = visits.filter((v: any) => v.ticketStatus === 'FINISHED').length;
+        const waitingCount = visits.filter((v: any) => v.ticketStatus === 'WAITING').length;
+
+        // 5. Configuração do Documento
         const docDefinition: any = {
             pageOrientation: 'landscape',
             defaultStyle: { font: 'Helvetica' },
@@ -214,10 +249,12 @@ router.get('/pdf', async (req, res) => {
                 ]
             },
             footer: (currentPage: number, pageCount: number) => {
+                let footerDate = '';
+                try { footerDate = format(new Date(), 'dd/MM/yyyy HH:mm'); } catch (e) { footerDate = 'Data Indisponível'; }
                 return {
                     margin: [40, 0, 40, 20],
                     columns: [
-                        { text: `Gerado em: ${format(new Date(), 'dd/MM/yyyy HH:mm')} | Filtro Aplicado`, fontSize: 8, color: '#64748b' },
+                        { text: `Gerado em: ${footerDate} | Filtro Aplicado`, fontSize: 8, color: '#64748b' },
                         { text: `Página ${currentPage} de ${pageCount}`, alignment: 'right', fontSize: 8, color: '#64748b' }
                     ]
                 };
@@ -227,8 +264,8 @@ router.get('/pdf', async (req, res) => {
                 {
                     columns: [
                         { text: `Total: ${visits.length}`, style: 'kpi' },
-                        { text: `Finalizados: ${visits.filter((v: any) => v.ticketStatus === 'FINISHED').length}`, style: 'kpi' },
-                        { text: `Aguardando: ${visits.filter((v: any) => v.ticketStatus === 'WAITING').length}`, style: 'kpi' }
+                        { text: `Finalizados: ${finishedCount}`, style: 'kpi' },
+                        { text: `Aguardando: ${waitingCount}`, style: 'kpi' }
                     ],
                     columnGap: 10,
                     margin: [0, 0, 0, 20]
@@ -260,17 +297,39 @@ router.get('/pdf', async (req, res) => {
             }
         };
 
+        // 6. Geração de Stream e Resposta com Captura de Erros On-Stream
+        console.log(`[PDF Export] Efetuando stream do relatório: [Setor: ${sectorName}]`);
         const pdfDoc = printer.createPdfKitDocument(docDefinition);
         
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `attachment; filename=Relatorio_${sectorName.replace(/\s/g, '_')}_${format(new Date(), 'yyyyMMdd')}.pdf`);
+        // Evitando caracters especiais no File Header que quebram o parsing Vercel HTTP
+        let safeSectorName = sectorName.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
+        let fileDate = '';
+        try { fileDate = format(new Date(), 'yyyyMMdd'); } catch(e) { fileDate = 'Export'; }
         
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename=Relatorio_${safeSectorName}_${fileDate}.pdf`);
+        
+        pdfDoc.on('error', (err: any) => {
+            console.error(`[PDF Export - STREAM EVENT] Erro durante a injeção do buffer do documento:`, err.message);
+            if (!res.headersSent) {
+                res.status(500).json({ error: 'Falha durante o envio (streaming) do documento de impressão PDF.' });
+            }
+            res.end();
+        });
+
         pdfDoc.pipe(res);
         pdfDoc.end();
 
-    } catch (error) {
-        console.error('PDF Export Error:', error);
-        res.status(500).json({ error: 'Falha ao exportar PDF' });
+    } catch (error: any) {
+        console.error('[PDF Export - FATAL CATCH]', error);
+        if (!res.headersSent) {
+            res.status(500).json({ 
+                error: 'Falha interna não-tratada ao exportar PDF', 
+                message: process.env.NODE_ENV === 'development' ? error.stack : error.message 
+            });
+        } else {
+            res.end();
+        }
     }
 });
 
