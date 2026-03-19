@@ -7,8 +7,10 @@ import {
     LineChart, Line 
 } from 'recharts';
 import { 
-    Activity, ShieldCheck, Clock, FileWarning, ArrowLeft, BarChart3, TrendingUp 
+    Activity, ShieldCheck, Clock, FileWarning, ArrowLeft, BarChart3, TrendingUp,
+    Download, ChevronDown, FileText, FileSpreadsheet, Mail
 } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface VisitData {
     id: string;
@@ -26,6 +28,7 @@ const DataAnalytics: React.FC = () => {
     const navigate = useNavigate();
     const [visits, setVisits] = useState<VisitData[]>([]);
     const [loading, setLoading] = useState(true);
+    const [exportMenuOpen, setExportMenuOpen] = useState(false);
 
     useEffect(() => {
         fetchData();
@@ -129,6 +132,53 @@ const DataAnalytics: React.FC = () => {
         alert(`Drill-down para o setor: ${data.name}. Isso abrirá o modal detalhado na visão de TI.`);
     };
 
+    const handleExport = async (type: 'pdf' | 'xlsx') => {
+        setExportMenuOpen(false);
+        const loadingId = toast.loading(`Gerando exportação global ${type.toUpperCase()}...`);
+        try {
+            const res = await fetch(`${API_URL}/api/export/${type}?filterType=month&date=${new Date().toISOString()}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.error || 'Falha ao exportar');
+            }
+            
+            const blob = await res.blob();
+            let filename = `Relatorio_Global_Export.${type}`;
+            const disposition = res.headers.get('content-disposition');
+            if (disposition && disposition.indexOf('filename=') !== -1) {
+                const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+                const matches = filenameRegex.exec(disposition);
+                if (matches != null && matches[1]) {
+                    filename = matches[1].replace(/['"]/g, '');
+                }
+            }
+
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            
+            toast.dismiss(loadingId);
+            toast.success(`Exportação global ${type.toUpperCase()} concluída!`);
+        } catch (error: any) {
+            toast.dismiss(loadingId);
+            toast.error(error.message || 'Erro ao gerar exportação.');
+            console.error(error);
+        }
+    };
+
+    const handleScheduleEmail = () => {
+        setExportMenuOpen(false);
+        toast.info("A funcionalidade de agendamento por e-mail está em prévia e será lançada na próxima versão.");
+    };
+
     const COLORS = ['#6366f1', '#10b981', '#f43f5e', '#f59e0b', '#8b5cf6'];
 
     if (loading) {
@@ -156,6 +206,41 @@ const DataAnalytics: React.FC = () => {
                         </h1>
                         <p className="text-sm text-slate-400">Visão Transversal de Performance & Governança (Mês Atual)</p>
                     </div>
+                </div>
+
+                <div className="relative">
+                    <button
+                        onClick={() => setExportMenuOpen(!exportMenuOpen)}
+                        className="flex items-center gap-2 px-4 py-2.5 bg-indigo-500/10 border border-indigo-500/50 hover:bg-indigo-500/20 text-indigo-300 font-bold rounded-lg transition-all"
+                    >
+                        <Download className="w-4 h-4" /> Exportar Global <ChevronDown className="w-4 h-4" />
+                    </button>
+                    
+                    {exportMenuOpen && (
+                        <div className="absolute right-0 top-full mt-2 w-64 bg-slate-800 border border-slate-600 rounded-xl shadow-2xl z-50 overflow-hidden">
+                            <button 
+                                onClick={() => handleExport('pdf')}
+                                className="w-full text-left px-4 py-3 hover:bg-slate-700 flex items-center gap-3 text-slate-200 font-medium border-b border-slate-700 transition-colors"
+                            >
+                                <div className="bg-red-500/20 p-2 rounded-lg border border-red-500/30"><FileText className="w-4 h-4 text-red-400" /></div>
+                                PDF Premium
+                            </button>
+                            <button 
+                                onClick={() => handleExport('xlsx')}
+                                className="w-full text-left px-4 py-3 hover:bg-slate-700 flex items-center gap-3 text-slate-200 font-medium border-b border-slate-700 transition-colors"
+                            >
+                                <div className="bg-emerald-500/20 p-2 rounded-lg border border-emerald-500/30"><FileSpreadsheet className="w-4 h-4 text-emerald-400" /></div>
+                                XLSX Inteligente
+                            </button>
+                            <button 
+                                onClick={handleScheduleEmail}
+                                className="w-full text-left px-4 py-3 hover:bg-slate-700 flex items-center gap-3 text-slate-300 font-medium transition-colors"
+                            >
+                                <div className="bg-blue-500/20 p-2 rounded-lg border border-blue-500/30"><Mail className="w-4 h-4 text-blue-400" /></div>
+                                Agendar envio por e-mail
+                            </button>
+                        </div>
+                    )}
                 </div>
             </header>
 

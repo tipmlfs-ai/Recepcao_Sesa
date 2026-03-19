@@ -78,12 +78,19 @@ const QueueDisplay: React.FC = () => {
         setHeroKey(k => k + 1);
         setHeroGlow(true);
         setTimeout(() => setHeroGlow(false), 3000);
+
+        // Play Loud notification sound
+        try {
+          const audio = new Audio('/chime.ogg');
+          audio.volume = 1.0;
+          audio.play().catch(e => console.error("Audio playback blocked by browser:", e));
+        } catch(e) {}
       } else if (!newHero) {
         prevHeroCode.current = null;
       }
-      
+
       setData({ ...json, tickets: filteredTickets });
-    } catch (_) {}
+    } catch (_) { }
   }, []);
 
   // ── Supabase Realtime ─────────────────────────────────────────────────────
@@ -113,7 +120,7 @@ const QueueDisplay: React.FC = () => {
 
   // ── Derived state ──────────────────────────────────────────────────────────
   const inServiceTickets = data.tickets.filter(t => t.status === 'IN_SERVICE');
-  
+
   // Hero is the MOST RECENT (last in array ordered by timestamp asc)
   const heroTicket = inServiceTickets.length > 0 ? inServiceTickets[inServiceTickets.length - 1] : null;
 
@@ -127,7 +134,7 @@ const QueueDisplay: React.FC = () => {
         <div style={styles.headerLeft}>
           <img src="/logo.png" alt="Logo" style={styles.logo} onError={e => { (e.target as HTMLImageElement).style.visibility = 'hidden'; }} />
           <div style={styles.logoDivider} />
-          <span style={styles.headerTitle}>SESA · CAF</span>
+          <span style={styles.headerTitle}>SESA-LAURO</span>
         </div>
 
         <div style={styles.headerRight}>
@@ -160,11 +167,11 @@ const QueueDisplay: React.FC = () => {
           <header style={styles.listHeader}>
             <h2 style={styles.listTitle}>ÚLTIMAS CHAMADAS</h2>
           </header>
-          
+
           <div style={styles.gridContainer}>
             {listTickets.length > 0 ? (
               listTickets.map((t, idx) => {
-                const info = getTicketStatusInfo(t, idx); 
+                const info = getTicketStatusInfo(t, idx);
                 return (
                   <div
                     key={t.id}
@@ -195,7 +202,7 @@ const QueueDisplay: React.FC = () => {
           <span style={styles.legendSep}>|</span>
           <span style={styles.legendItem}><strong>B</strong> Outros</span>
         </div>
-        
+
         <Link to="/login" style={styles.backBtn}>Acesso Restrito</Link>
       </footer>
 
