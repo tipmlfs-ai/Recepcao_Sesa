@@ -125,19 +125,28 @@ const QueueDisplay: React.FC = () => {
                     audioManager.playLoudSmoothChime();
                     // Agenda a fala repetida para 1.5s após o início do chime
                     setTimeout(() => {
-                        const name = next.citizenName || "Cidadão";
+                        // Sanitiza o nome removendo o prefixo "Paciente" se existir
+                        let name = next.citizenName || "Cidadão";
+                        name = name.replace(/^paciente\s+/i, '');
+                        
                         audioManager.speak(name, 3, 1000); // 3 vezes com 1s de intervalo
                     }, 1500);
                 } catch(e) {}
 
-                // Define o tempo que este ticket ficará como "Hero" (10 segundos conforme solicitado)
+                // Ciclo: 10s de exibição + 4s de intervalo totalizando 14s entre inícios
                 queueTimeoutRef.current = setTimeout(() => {
-                    if (rest.length > 0) {
-                        processNext();
-                    } else {
-                        queueTimeoutRef.current = null;
-                        // Opcional: manter o último na tela ou limpar após X tempo
-                    }
+                    // Após 10s, limpa o card principal (Hero)
+                    setDisplayHero(null);
+                    
+                    // Aguarda mais 4s de brecha antes de processar o próximo, se houver
+                    queueTimeoutRef.current = setTimeout(() => {
+                        if (rest.length > 0) {
+                            processNext();
+                        } else {
+                            queueTimeoutRef.current = null;
+                        }
+                    }, 4000);
+
                 }, 10000); 
                 
                 return rest;
