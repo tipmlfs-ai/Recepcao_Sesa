@@ -182,7 +182,7 @@ const Controller: React.FC = () => {
                 // Start cooldown
                 const timestamp = Date.now();
                 localStorage.setItem(`@RecepcaoSesa:cooldown:${sector.id}`, timestamp.toString());
-                setCooldown(300);
+                setCooldown(180);
             } else {
                 const err = await res.json();
                 toast.error(err.error || 'Nenhum cidadão na fila');

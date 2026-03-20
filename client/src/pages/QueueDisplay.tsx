@@ -130,7 +130,7 @@ const QueueDisplay: React.FC = () => {
                     }, 1500);
                 } catch(e) {}
 
-                // Define o tempo que este ticket ficará como "Hero" (Reduzido para 3 segundos conforme solicitado)
+                // Define o tempo que este ticket ficará como "Hero" (10 segundos conforme solicitado)
                 queueTimeoutRef.current = setTimeout(() => {
                     if (rest.length > 0) {
                         processNext();
@@ -138,7 +138,7 @@ const QueueDisplay: React.FC = () => {
                         queueTimeoutRef.current = null;
                         // Opcional: manter o último na tela ou limpar após X tempo
                     }
-                }, 3000); 
+                }, 10000); 
                 
                 return rest;
             });
