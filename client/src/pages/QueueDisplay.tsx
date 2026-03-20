@@ -53,6 +53,7 @@ const QueueDisplay: React.FC = () => {
   const [callQueue, setCallQueue] = useState<Ticket[]>([]);
   const [displayHero, setDisplayHero] = useState<Ticket | null>(null);
   const processedIdsRef = useRef<Set<string>>(new Set());
+  const isFirstFetchRef = useRef(true); // Evita anunciar o que já estava em atendimento ao carregar
   const channelRef = useRef<RealtimeChannel | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const queueTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -82,12 +83,17 @@ const QueueDisplay: React.FC = () => {
       const newCalls = inService.filter(t => !processedIdsRef.current.has(t.id));
       
       if (newCalls.length > 0) {
-        // Add new calls to the buffer queue
-        setCallQueue(prev => [...prev, ...newCalls]);
-        
-        // Update processed set
-        newCalls.forEach(t => processedIdsRef.current.add(t.id));
+        // Se for a primeira carga, apenas marca como processado sem colocar na fila de anúncio
+        if (isFirstFetchRef.current) {
+          newCalls.forEach(t => processedIdsRef.current.add(t.id));
+        } else {
+          // Add new calls to the buffer queue
+          setCallQueue(prev => [...prev, ...newCalls]);
+          // Update processed set
+          newCalls.forEach(t => processedIdsRef.current.add(t.id));
+        }
       }
+      isFirstFetchRef.current = false;
 
       // Cleanup processed set (remove IDs that are no longer in service)
       const currentServiceIds = new Set(inService.map(t => t.id));
@@ -117,18 +123,22 @@ const QueueDisplay: React.FC = () => {
 
                 try {
                     audioManager.playLoudSmoothChime();
-                    // Agenda a fala para 1.5s após o início do chime (delay do toque)
+                    // Agenda a fala repetida para 1.5s após o início do chime
                     setTimeout(() => {
                         const name = next.citizenName || "Cidadão";
-                        audioManager.speak(`Paciente ${name}, por favor comparecer ao atendimento.`);
+                        audioManager.speak(name, 3, 2000); // 3 vezes com 2s de intervalo
                     }, 1500);
                 } catch(e) {}
 
-                if (rest.length > 0) {
-                    queueTimeoutRef.current = setTimeout(processNext, 6000);
-                } else {
-                    queueTimeoutRef.current = null;
-                }
+                // Define o tempo que este ticket ficará como "Hero" (10 segundos)
+                // Se houver mais na fila, chamará o próximo APÓS esses 10 segundos.
+                queueTimeoutRef.current = setTimeout(() => {
+                    if (rest.length > 0) {
+                        processNext();
+                    } else {
+                        queueTimeoutRef.current = null;
+                    }
+                }, 10000);
                 
                 return rest;
             });

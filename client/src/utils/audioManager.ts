@@ -77,30 +77,42 @@ class AudioManager {
 
   /**
    * Converte texto em fala (TTS) usando a API nativa do navegador.
-   * Configurado para o idioma pt-BR e velocidade natural.
+   * Suporta repetições com intervalo configurável.
    */
-  public speak(text: string) {
+  public speak(text: string, repeats: number = 1, intervalMs: number = 1500) {
     if (typeof window === 'undefined' || !window.speechSynthesis) {
         console.warn("Speech Synthesis não suportado neste navegador.");
         return;
     }
 
-    // Cancela falas anteriores que possam estar na fila (opcional, dependendo da UX)
-    // window.speechSynthesis.cancel();
+    const speakOnce = () => {
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'pt-BR';
+      utterance.rate = 1.0; 
+      utterance.pitch = 1.0;
 
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'pt-BR';
-    utterance.rate = 1.0; // Velocidade natural
-    utterance.pitch = 1.0; // Tom natural
+      const voices = window.speechSynthesis.getVoices();
+      const brVoice = voices.find(v => v.lang.includes('pt-BR'));
+      if (brVoice) utterance.voice = brVoice;
 
-    // Tenta encontrar uma voz em pt-BR disponível
-    const voices = window.speechSynthesis.getVoices();
-    const brVoice = voices.find(v => v.lang.includes('pt-BR'));
-    if (brVoice) {
-      utterance.voice = brVoice;
+      window.speechSynthesis.speak(utterance);
+    };
+
+    // Primeira fala
+    speakOnce();
+
+    // Agendar as repetições se necessário
+    if (repeats > 1) {
+      let count = 1;
+      const interval = setInterval(() => {
+        if (count < repeats) {
+          speakOnce();
+          count++;
+        } else {
+          clearInterval(interval);
+        }
+      }, intervalMs);
     }
-
-    window.speechSynthesis.speak(utterance);
   }
 
   /**
