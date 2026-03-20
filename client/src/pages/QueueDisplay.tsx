@@ -28,6 +28,61 @@ const COLORS = {
   border: 'rgba(255,255,255,0.08)',
   cardBg: 'rgba(255,255,255,0.03)',
 };
+// ── Audio Helper ─────────────────────────────────────────────────────────────
+const playLoudSmoothChime = () => {
+  try {
+    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+    
+    // Função para tocar uma nota com envelope suave (attack suave, release longo)
+    const playNote = (freq: number, start: number, dur: number, vol: number) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      
+      // Delay simples para ressonância (eco suave)
+      const delay = ctx.createDelay();
+      delay.delayTime.value = 0.2;
+      const delayGain = ctx.createGain();
+      delayGain.gain.value = 0.25;
+      
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      gain.connect(delay);
+      delay.connect(delayGain);
+      delayGain.connect(ctx.destination);
+      
+      osc.type = 'sine'; // Onda senoidal para um som bem "suave" (soft/smooth)
+      osc.frequency.setValueAtTime(freq, ctx.currentTime + start);
+      
+      // Envelope
+      gain.gain.setValueAtTime(0, ctx.currentTime + start);
+      gain.gain.linearRampToValueAtTime(vol, ctx.currentTime + start + 0.1); // Attack suave
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur); // Release longo
+      
+      osc.start(ctx.currentTime + start);
+      osc.stop(ctx.currentTime + start + dur);
+    };
+
+    // Sequência de notas: Um majestoso "Ding-Dong", volumoso e suave.
+    const t0 = 0;
+    const t1 = 0.6;
+
+    // BING (Mi Maior)
+    playNote(659.25, t0, 3.0, 0.7); // E5
+    playNote(830.61, t0, 3.0, 0.4); // G#5
+    playNote(329.63, t0, 3.5, 0.7); // E4 (base grave poderosa)
+
+    // BONG (Dó sustenido menor)
+    playNote(554.37, t1, 4.0, 0.7); // C#5
+    playNote(659.25, t1, 4.0, 0.4); // E5
+    playNote(277.18, t1, 4.5, 0.7); // C#4 (base grave prolongada)
+
+  } catch (e) {
+    console.error("Audio synth error:", e);
+  }
+};
 
 // ── Helper to determine ticket visual status ────────────────────────────────
 const getTicketStatusInfo = (ticket: Ticket, indexInList: number) => {
@@ -79,11 +134,9 @@ const QueueDisplay: React.FC = () => {
         setHeroGlow(true);
         setTimeout(() => setHeroGlow(false), 3000);
 
-        // Play Loud notification sound
+        // Play Loud notification sound (Alto e suave - Gerado pelo Web Audio API)
         try {
-          const audio = new Audio('/chime.ogg');
-          audio.volume = 1.0;
-          audio.play().catch(e => console.error("Audio playback blocked by browser:", e));
+          playLoudSmoothChime();
         } catch(e) {}
       } else if (!newHero) {
         prevHeroCode.current = null;
