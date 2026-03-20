@@ -235,9 +235,14 @@ const QueueDisplay: React.FC = () => {
                       animationDelay: `${idx * 80}ms`,
                       background: 'rgba(255,255,255,0.03)',
                       borderColor: 'rgba(255,255,255,0.08)',
+                      flexDirection: 'column',
+                      gap: '4px'
                     }}
                   >
                     <span style={{ ...styles.gridCode, color: info.color }}>{t.code}</span>
+                    <span style={{ ...styles.gridSector, color: info.color + '80' }}>
+                      {t.sectorName}
+                    </span>
                   </div>
                 );
               })
@@ -461,6 +466,8 @@ const styles: Record<string, React.CSSProperties> = {
   gridContainer: {
     display: 'grid',
     gridTemplateColumns: 'repeat(3, 1fr)',
+    gridAutoRows: '100px',
+    alignContent: 'start',
     gap: '12px',
     flex: 1,
     overflow: 'auto',
@@ -479,6 +486,15 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '28px',
     fontWeight: 800,
     letterSpacing: '1px',
+    margin: 0,
+    lineHeight: '1.2',
+  },
+  gridSector: {
+    fontSize: '10px',
+    fontWeight: 700,
+    letterSpacing: '2px',
+    textTransform: 'uppercase',
+    opacity: 0.8,
   },
   noQueue: {
     textAlign: 'center',
