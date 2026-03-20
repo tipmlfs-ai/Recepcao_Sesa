@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect, useRef, useState } from 'react';
+import React, { useMemo, useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useRealTimeStatus } from '../useRealTimeStatus';
 import { useAuth } from '../contexts/AuthContext';
@@ -24,10 +24,37 @@ const Controller: React.FC = () => {
     const [isArrivalOrderOpen, setIsArrivalOrderOpen] = useState(false);
     const [isInServiceOrderOpen, setIsInServiceOrderOpen] = useState(false);
 
+    // Fetch the oldest IN_SERVICE visit to set as current
+    const fetchNextInService = useCallback(async (sId: string) => {
+        try {
+            const token = localStorage.getItem('@RecepcaoSesa:token');
+            const res = await fetch(`${API_URL}/api/sectors/${sId}/in-service`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                if (data.length > 0) {
+                    setCurrentCitizen({ name: data[0].citizen.name });
+                } else {
+                    setCurrentCitizen(null);
+                }
+            }
+        } catch (error) {
+            console.error("Error auto-fetching next in service:", error);
+        }
+    }, []);
+
     const sector = useMemo(() => {
         if (!user?.sectorName) return undefined;
         return sectors.find(s => s.name.toLowerCase() === user.sectorName?.toLowerCase());
     }, [sectors, user]);
+
+    // Initial fetch when sector is ready
+    useEffect(() => {
+        if (sector?.id) {
+            fetchNextInService(sector.id);
+        }
+    }, [sector?.id, fetchNextInService]);
 
     // Handle Cooldown Timer
     useEffect(() => {
@@ -168,10 +195,10 @@ const Controller: React.FC = () => {
     const handleBatchCallSuccess = (calledCitizens: any[]) => {
         if (!sector) return;
         if (calledCitizens.length > 0) {
-            // Set the first citizen from the batch as the current one for tracking
-            setCurrentCitizen({ name: `${calledCitizens[0].citizen.name} (+${calledCitizens.length - 1} outros)` });
+            // Set the first citizen from the batch as the current one
+            setCurrentCitizen({ name: calledCitizens[0].citizen.name });
             
-            // Start cooldown for batch calling (maybe shorter or standard?)
+            // Start cooldown
             const timestamp = Date.now();
             localStorage.setItem(`@RecepcaoSesa:cooldown:${sector.id}`, timestamp.toString());
             setCooldown(300);
@@ -204,7 +231,11 @@ const Controller: React.FC = () => {
             if (res.ok) {
                 toast.success(`Ticket ${fullCode} finalizado!`);
                 setCheckoutCode('');
-                setCurrentCitizen(null); // Clear the active citizen on checkout
+                
+                // Automatically fetch next in service
+                if (sector) {
+                    fetchNextInService(sector.id);
+                }
 
                 // Clear cooldown immediately on checkout to allow calling next
                 setCooldown(0);
