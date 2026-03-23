@@ -57,6 +57,12 @@ const QueueDisplay: React.FC = () => {
   const isFirstFetchRef = useRef(true); // Evita anunciar o que já estava em atendimento ao carregar
   const channelRef = useRef<RealtimeChannel | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const callQueueRef = useRef<Ticket[]>([]);
+
+  // Mantém a ref sincronizada para usarmos o valor atualizado no processo async
+  useEffect(() => {
+    callQueueRef.current = callQueue;
+  }, [callQueue]);
 
   // ── Clock ──────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -128,28 +134,29 @@ const QueueDisplay: React.FC = () => {
           let name = next.citizenName || "Cidadão";
           name = name.replace(/^paciente\s+/i, '');
 
-          const visualPromise = new Promise(resolve => {
-            setTimeout(() => {
-              setHeroGlow(false);
-              resolve(true);
-            }, 3000); // 3s hero visual glow blink
-          });
+          // Fala o nome apenas 1 vez (Single Call)
+          await audioManager.speak(name, 1, 1000);
 
-          // Wait for both voice 3x and visual blink to finish
-          const audioPromise = audioManager.speak(name, 3, 1000);
-          await Promise.all([visualPromise, audioPromise]);
+          // Ao término da fala (onend/onerror no TTS manager), o visual encerra
+          setHeroGlow(false);
         } catch (e) {
           console.error("Erro no processamento da chamada", e);
+          setHeroGlow(false);
         }
 
-        // Intervalo de Respiro (Cooldown): 2 segundos exatos
+        // Smart Delay: Gerenciamento Dinâmico de Pausa
+        if (callQueueRef.current.length > 0) {
+          // Existe alguém aguardando (ex: Batch call): pausa rigorosa de 5s
+          await new Promise(resolve => setTimeout(resolve, 5000));
+        } else {
+          // Fila vazia: encerra ciclo imediatamente e fica em estado IDLE
+        }
+
+        setDisplayHero(null);
+        // Wait brief delay to allow React to clear the screen
         setTimeout(() => {
-          setDisplayHero(null);
-          // Wait brief delay to allow React to clear the screen
-          setTimeout(() => {
-            setIsProcessing(false);
-          }, 300);
-        }, 2000);
+          setIsProcessing(false);
+        }, 100);
       };
 
       processNext();
@@ -418,7 +425,7 @@ const styles: Record<string, React.CSSProperties> = {
     overflow: 'hidden',
   },
   heroCardGlow: {
-    animation: 'heroPulse 3s cubic-bezier(0.16, 1, 0.3, 1), cardGlow 3s ease-in-out',
+    animation: 'heroPulse 3s cubic-bezier(0.16, 1, 0.3, 1), cardGlow 2s ease-in-out infinite',
     borderColor: 'rgba(34,197,94,0.3)',
   },
   heroSub: {
