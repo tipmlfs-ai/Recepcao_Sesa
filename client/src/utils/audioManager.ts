@@ -76,6 +76,7 @@ class AudioManager {
   }
 
   private activeUtterance: SpeechSynthesisUtterance | null = null;
+  private activeTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
   /**
    * Converte texto em fala (TTS) usando a API nativa do navegador com repetições confiáveis.
@@ -86,8 +87,12 @@ class AudioManager {
         return;
     }
 
-    // Cancela qualquer fala anterior para evitar sobreposição ou travamentos
+    // Cancela qualquer fala anterior e os timers agendados
     window.speechSynthesis.cancel();
+    if (this.activeTimeoutId) {
+      clearTimeout(this.activeTimeoutId);
+      this.activeTimeoutId = null;
+    }
 
     const speakRecursive = (remaining: number) => {
       if (remaining <= 0) {
@@ -110,7 +115,7 @@ class AudioManager {
 
       utterance.onend = () => {
         if (remaining > 1) {
-          setTimeout(() => speakRecursive(remaining - 1), intervalMs);
+          this.activeTimeoutId = setTimeout(() => speakRecursive(remaining - 1), intervalMs);
         } else {
           this.activeUtterance = null;
         }
@@ -119,7 +124,7 @@ class AudioManager {
       utterance.onerror = (err) => {
         console.error("[TTS] Erro na fala:", err);
         if (remaining > 1) {
-          setTimeout(() => speakRecursive(remaining - 1), intervalMs);
+          this.activeTimeoutId = setTimeout(() => speakRecursive(remaining - 1), intervalMs);
         } else {
           this.activeUtterance = null;
         }

@@ -51,6 +51,7 @@ const QueueDisplay: React.FC = () => {
   const [heroKey, setHeroKey] = useState(0);
   const [heroGlow, setHeroGlow] = useState(false);
   const [callQueue, setCallQueue] = useState<Ticket[]>([]);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [displayHero, setDisplayHero] = useState<Ticket | null>(null);
   const processedIdsRef = useRef<Set<string>>(new Set());
   const isFirstFetchRef = useRef(true); // Evita anunciar o que já estava em atendimento ao carregar
@@ -107,60 +108,48 @@ const QueueDisplay: React.FC = () => {
 
   // ── Process Call Queue (Staggered Delay) ──────────────────────────────────
   useEffect(() => {
-    if (callQueue.length > 0 && !queueTimeoutRef.current) {
-        const processNext = () => {
-            setCallQueue(prev => {
-                if (prev.length === 0) {
-                    queueTimeoutRef.current = null;
-                    return prev;
-                };
-                
-                const [next, ...rest] = prev;
-                setDisplayHero(next);
-                setHeroKey(k => k + 1);
-                setHeroGlow(true);
-                setTimeout(() => setHeroGlow(false), 3000);
+    if (callQueue.length > 0 && !isProcessing) {
+      setIsProcessing(true);
+      const next = callQueue[0];
 
-                try {
-                    audioManager.playLoudSmoothChime();
-                    // Agenda a fala repetida para 1.5s após o início do chime
-                    setTimeout(() => {
-                        // Sanitiza o nome removendo o prefixo "Paciente" se existir
-                        let name = next.citizenName || "Cidadão";
-                        name = name.replace(/^paciente\s+/i, '');
-                        
-                        audioManager.speak(name, 3, 1000); // 3 vezes com 1s de intervalo
-                    }, 1500);
-                } catch(e) {}
+      // Remove current element from queue pure state
+      setCallQueue(prev => prev.slice(1));
 
-                // Ciclo: 10s de exibição + 4s de intervalo totalizando 14s entre inícios
-                queueTimeoutRef.current = setTimeout(() => {
-                    // Após 10s, limpa o card principal (Hero)
-                    setDisplayHero(null);
-                    
-                    // Aguarda mais 4s de brecha antes de processar o próximo, se houver
-                    queueTimeoutRef.current = setTimeout(() => {
-                        if (rest.length > 0) {
-                            processNext();
-                        } else {
-                            queueTimeoutRef.current = null;
-                        }
-                    }, 4000);
+      setDisplayHero(next);
+      setHeroKey(k => k + 1);
+      setHeroGlow(true);
+      setTimeout(() => setHeroGlow(false), 3000);
 
-                }, 10000); 
-                
-                return rest;
-            });
-        };
+      try {
+        audioManager.playLoudSmoothChime();
+        // Agenda a fala repetida para 1.5s após o início do chime
+        setTimeout(() => {
+          // Sanitiza o nome removendo o prefixo "Paciente" se existir
+          let name = next.citizenName || "Cidadão";
+          name = name.replace(/^paciente\s+/i, '');
 
-        processNext();
+          audioManager.speak(name, 3, 1000); // 3 vezes com 1s de intervalo
+        }, 1500);
+      } catch (e) { }
+
+      // Ciclo: 10s de exibição + 4s de intervalo totalizando 14s entre inícios
+      queueTimeoutRef.current = setTimeout(() => {
+        // Após 10s, limpa o card principal (Hero)
+        setDisplayHero(null);
+
+        // Aguarda mais 4s de brecha antes de libertar a flag para o próximo
+        queueTimeoutRef.current = setTimeout(() => {
+          setIsProcessing(false);
+        }, 4000);
+
+      }, 10000);
     }
-    
+
     return () => {
-        if (queueTimeoutRef.current) clearTimeout(queueTimeoutRef.current);
-        queueTimeoutRef.current = null;
+      // NOTE: We don't clear the timeout immediately on unmount in dev Strict Mode to prevent 
+      // interrupting the flow, but in production this is fine. The ref will be lost.
     }
-  }, [callQueue.length]);
+  }, [callQueue, isProcessing]);
 
   // ── Supabase Realtime ─────────────────────────────────────────────────────
   useEffect(() => {
