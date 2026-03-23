@@ -57,7 +57,6 @@ const QueueDisplay: React.FC = () => {
   const isFirstFetchRef = useRef(true); // Evita anunciar o que já estava em atendimento ao carregar
   const channelRef = useRef<RealtimeChannel | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const queueTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Clock ──────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -88,8 +87,9 @@ const QueueDisplay: React.FC = () => {
         if (isFirstFetchRef.current) {
           newCalls.forEach(t => processedIdsRef.current.add(t.id));
         } else {
-          // Add new calls to the buffer queue
-          setCallQueue(prev => [...prev, ...newCalls]);
+          // Add new calls to the buffer queue, prioritizing strictly by timestamp
+          const sortedNewCalls = [...newCalls].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+          setCallQueue(prev => [...prev, ...sortedNewCalls]);
           // Update processed set
           newCalls.forEach(t => processedIdsRef.current.add(t.id));
         }
@@ -109,45 +109,54 @@ const QueueDisplay: React.FC = () => {
   // ── Process Call Queue (Staggered Delay) ──────────────────────────────────
   useEffect(() => {
     if (callQueue.length > 0 && !isProcessing) {
-      setIsProcessing(true);
-      const next = callQueue[0];
+      const processNext = async () => {
+        setIsProcessing(true);
+        const next = callQueue[0];
 
-      // Remove current element from queue pure state
-      setCallQueue(prev => prev.slice(1));
+        // Remove from queue
+        setCallQueue(prev => prev.slice(1));
 
-      setDisplayHero(next);
-      setHeroKey(k => k + 1);
-      setHeroGlow(true);
-      setTimeout(() => setHeroGlow(false), 3000);
+        setDisplayHero(next);
+        setHeroKey(k => k + 1);
+        setHeroGlow(true);
 
-      try {
-        audioManager.playLoudSmoothChime();
-        // Agenda a fala repetida para 1.5s após o início do chime
-        setTimeout(() => {
-          // Sanitiza o nome removendo o prefixo "Paciente" se existir
+        try {
+          audioManager.playLoudSmoothChime();
+          // Wait 1.5s for the chime to settle before speaking
+          await new Promise(resolve => setTimeout(resolve, 1500));
+
           let name = next.citizenName || "Cidadão";
           name = name.replace(/^paciente\s+/i, '');
 
-          audioManager.speak(name, 3, 1000); // 3 vezes com 1s de intervalo
-        }, 1500);
-      } catch (e) { }
+          const visualPromise = new Promise(resolve => {
+            setTimeout(() => {
+              setHeroGlow(false);
+              resolve(true);
+            }, 3000); // 3s hero visual glow blink
+          });
 
-      // Ciclo: 10s de exibição + 4s de intervalo totalizando 14s entre inícios
-      queueTimeoutRef.current = setTimeout(() => {
-        // Após 10s, limpa o card principal (Hero)
-        setDisplayHero(null);
+          // Wait for both voice 3x and visual blink to finish
+          const audioPromise = audioManager.speak(name, 3, 1000);
+          await Promise.all([visualPromise, audioPromise]);
+        } catch (e) {
+          console.error("Erro no processamento da chamada", e);
+        }
 
-        // Aguarda mais 4s de brecha antes de libertar a flag para o próximo
-        queueTimeoutRef.current = setTimeout(() => {
-          setIsProcessing(false);
-        }, 4000);
+        // Intervalo de Respiro (Cooldown): 2 segundos exatos
+        setTimeout(() => {
+          setDisplayHero(null);
+          // Wait brief delay to allow React to clear the screen
+          setTimeout(() => {
+            setIsProcessing(false);
+          }, 300);
+        }, 2000);
+      };
 
-      }, 10000);
+      processNext();
     }
 
     return () => {
-      // NOTE: We don't clear the timeout immediately on unmount in dev Strict Mode to prevent 
-      // interrupting the flow, but in production this is fine. The ref will be lost.
+      // Cleanup not strictly handled as its managed by state timeout logic
     }
   }, [callQueue, isProcessing]);
 

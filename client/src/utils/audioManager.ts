@@ -81,59 +81,65 @@ class AudioManager {
   /**
    * Converte texto em fala (TTS) usando a API nativa do navegador com repetições confiáveis.
    */
-  public speak(text: string, repeats: number = 1, intervalMs: number = 1200) {
-    if (typeof window === 'undefined' || !window.speechSynthesis) {
-        console.warn("Speech Synthesis não suportado.");
-        return;
-    }
-
-    // Cancela qualquer fala anterior e os timers agendados
-    window.speechSynthesis.cancel();
-    if (this.activeTimeoutId) {
-      clearTimeout(this.activeTimeoutId);
-      this.activeTimeoutId = null;
-    }
-
-    const speakRecursive = (remaining: number) => {
-      if (remaining <= 0) {
-        this.activeUtterance = null;
-        return;
+  public speak(text: string, repeats: number = 1, intervalMs: number = 1200): Promise<void> {
+    return new Promise((resolve) => {
+      if (typeof window === 'undefined' || !window.speechSynthesis) {
+          console.warn("Speech Synthesis não suportado.");
+          resolve();
+          return;
       }
 
-      const utterance = new SpeechSynthesisUtterance(text);
-      this.activeUtterance = utterance; // Previne Garbage Collection (Bug comum no Chrome)
-      
-      console.log(`[TTS] Falando: "${text}" (Restam ${remaining} repetições)`, this.activeUtterance);
-      
-      utterance.lang = 'pt-BR';
-      utterance.rate = 1.0;
-      utterance.pitch = 1.0;
+      // Cancela qualquer fala anterior e os timers agendados
+      window.speechSynthesis.cancel();
+      if (this.activeTimeoutId) {
+        clearTimeout(this.activeTimeoutId);
+        this.activeTimeoutId = null;
+      }
 
-      const voices = window.speechSynthesis.getVoices();
-      const brVoice = voices.find(v => v.lang.includes('pt-BR'));
-      if (brVoice) utterance.voice = brVoice;
-
-      utterance.onend = () => {
-        if (remaining > 1) {
-          this.activeTimeoutId = setTimeout(() => speakRecursive(remaining - 1), intervalMs);
-        } else {
+      const speakRecursive = (remaining: number) => {
+        if (remaining <= 0) {
           this.activeUtterance = null;
+          resolve();
+          return;
         }
+
+        const utterance = new SpeechSynthesisUtterance(text);
+        this.activeUtterance = utterance; // Previne Garbage Collection (Bug comum no Chrome)
+        
+        console.log(`[TTS] Falando: "${text}" (Restam ${remaining} repetições)`, this.activeUtterance);
+        
+        utterance.lang = 'pt-BR';
+        utterance.rate = 1.0;
+        utterance.pitch = 1.0;
+
+        const voices = window.speechSynthesis.getVoices();
+        const brVoice = voices.find(v => v.lang.includes('pt-BR'));
+        if (brVoice) utterance.voice = brVoice;
+
+        utterance.onend = () => {
+          if (remaining > 1) {
+            this.activeTimeoutId = setTimeout(() => speakRecursive(remaining - 1), intervalMs);
+          } else {
+            this.activeUtterance = null;
+            resolve();
+          }
+        };
+
+        utterance.onerror = (err) => {
+          console.error("[TTS] Erro na fala:", err);
+          if (remaining > 1) {
+            this.activeTimeoutId = setTimeout(() => speakRecursive(remaining - 1), intervalMs);
+          } else {
+            this.activeUtterance = null;
+            resolve();
+          }
+        };
+
+        window.speechSynthesis.speak(utterance);
       };
 
-      utterance.onerror = (err) => {
-        console.error("[TTS] Erro na fala:", err);
-        if (remaining > 1) {
-          this.activeTimeoutId = setTimeout(() => speakRecursive(remaining - 1), intervalMs);
-        } else {
-          this.activeUtterance = null;
-        }
-      };
-
-      window.speechSynthesis.speak(utterance);
-    };
-
-    speakRecursive(repeats);
+      speakRecursive(repeats);
+    });
   }
 
   /**
