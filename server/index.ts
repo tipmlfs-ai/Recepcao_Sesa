@@ -643,42 +643,7 @@ app.get('/api/sectors/:id/in-service', authenticateToken, async (req, res) => {
     }
 });
 
-app.post('/api/sectors/:id/call-batch', authenticateToken, async (req, res) => {
-    try {
-        const sectorId = req.params.id as string;
-        const { visitIds } = req.body; // Array of UUIDs to call
 
-        if (!Array.isArray(visitIds) || visitIds.length === 0) {
-            return res.status(400).json({ error: 'Nenhum ticket selecionado para chamada.' });
-        }
-
-        // Limit batch size based on sector config
-        const sector = await prisma.sector.findUnique({ where: { id: sectorId } });
-        if (!sector) return res.status(404).json({ error: 'Setor não encontrado.' });
-        
-        const effectiveBatch = visitIds.slice(0, sector.maxBatchSize || 1);
-
-        // Update visits to IN_SERVICE one by one or in transaction
-        const results = await prisma.$transaction(
-            effectiveBatch.map(id => prisma.visit.update({
-                where: { id, sectorId, ticketStatus: 'WAITING' },
-                data: { ticketStatus: 'IN_SERVICE' },
-                include: { citizen: true, sector: true }
-            }))
-        );
-
-        // Decrement sector queue count
-        await prisma.sector.update({
-            where: { id: sectorId },
-            data: { queueCount: { decrement: results.length } }
-        });
-
-        res.json(results);
-    } catch (error) {
-        console.error('Error calling batch:', error);
-        res.status(400).json({ error: 'Erro ao processar chamada em lote. Verifique se os tickets ainda estão aguardando.' });
-    }
-});
 
 // --- SECTOR STATUS & QUEUE REST ENDPOINTS ---
 
@@ -686,13 +651,13 @@ app.post('/api/sectors/:id/call-batch', authenticateToken, async (req, res) => {
 app.patch('/api/sectors/:id', authenticateToken, requireAdmin, async (req, res) => {
     try {
         const id = req.params.id as string;
-        const { name, maxBatchSize, soundUrl } = req.body;
+        const { name, callCooldown, soundUrl } = req.body;
 
         const updatedSector = await prisma.sector.update({
             where: { id },
             data: { 
                 name, 
-                maxBatchSize: maxBatchSize ? parseInt(maxBatchSize) : undefined,
+                callCooldown: callCooldown !== undefined ? parseInt(callCooldown) : undefined,
                 soundUrl 
             },
         });

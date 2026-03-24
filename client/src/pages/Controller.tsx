@@ -6,7 +6,6 @@ import { LogOut, CheckCircle2, AlertTriangle, ShieldAlert, Users, PhoneCall, Has
 import { API_URL } from '../config/apiConfig';
 import { toast } from 'sonner';
 import { SectorDashboardModal } from '../components/SectorDashboardModal';
-import { ArrivalOrderModal } from '../components/ArrivalOrderModal';
 import { InServiceOrderModal } from '../components/InServiceOrderModal';
 
 const Controller: React.FC = () => {
@@ -21,9 +20,7 @@ const Controller: React.FC = () => {
     const [cooldown, setCooldown] = useState(0);
     const [currentCitizen, setCurrentCitizen] = useState<{ name: string } | null>(null);
     const [isDashboardOpen, setIsDashboardOpen] = useState(false);
-    const [isArrivalOrderOpen, setIsArrivalOrderOpen] = useState(false);
     const [isInServiceOrderOpen, setIsInServiceOrderOpen] = useState(false);
-    const [inServiceCount, setInServiceCount] = useState(0);
 
     // Fetch the oldest IN_SERVICE visit to set as current and count them
     const fetchNextInService = useCallback(async (sId: string) => {
@@ -34,7 +31,6 @@ const Controller: React.FC = () => {
             });
             if (res.ok) {
                 const data = await res.json();
-                setInServiceCount(data.length);
                 if (data.length > 0) {
                     setCurrentCitizen({ name: data[0].citizen.name });
                 } else {
@@ -68,8 +64,9 @@ const Controller: React.FC = () => {
             const lastCall = localStorage.getItem(storageKey);
             if (lastCall) {
                 const diff = Math.floor((Date.now() - parseInt(lastCall)) / 1000);
-                if (diff < 180) { // 3 minutes = 180 seconds
-                    setCooldown(180 - diff);
+                const maxCool = (sector as any).callCooldown ?? 120; // Fallback para 120s
+                if (diff < maxCool) {
+                    setCooldown(maxCool - diff);
                 } else {
                     setCooldown(0);
                     localStorage.removeItem(storageKey);
@@ -182,7 +179,7 @@ const Controller: React.FC = () => {
                 // Start cooldown
                 const timestamp = Date.now();
                 localStorage.setItem(`@RecepcaoSesa:cooldown:${sector.id}`, timestamp.toString());
-                setCooldown(180);
+                setCooldown((sector as any).callCooldown ?? 120);
             } else {
                 const err = await res.json();
                 toast.error(err.error || 'Nenhum cidadão na fila');
@@ -191,19 +188,6 @@ const Controller: React.FC = () => {
             toast.error('Erro de conexão');
         } finally {
             setCallingNext(false);
-        }
-    };
-
-    const handleBatchCallSuccess = (calledCitizens: any[]) => {
-        if (!sector) return;
-        if (calledCitizens.length > 0) {
-            // Set the first citizen from the batch as the current one
-            setCurrentCitizen({ name: calledCitizens[0].citizen.name });
-            
-            // Start cooldown (3 minutes)
-            const timestamp = Date.now();
-            localStorage.setItem(`@RecepcaoSesa:cooldown:${sector.id}`, timestamp.toString());
-            setCooldown(180);
         }
     };
 
@@ -374,22 +358,6 @@ const Controller: React.FC = () => {
                     )}
                 </button>
 
-                {/* Batch Calling Button (Arrival Order) */}
-                {sector && (sector.maxBatchSize || 1) > 1 && (
-                    <button
-                        onClick={() => setIsArrivalOrderOpen(true)}
-                        disabled={sector.queueCount === 0 || sector.status !== 'AVAILABLE'}
-                        className={`w-full group mt-[-10px] flex items-center justify-center gap-2 p-5 rounded-2xl font-black transition-all duration-300 active:scale-[0.98] border-2 shadow-lg ${
-                            sector.status !== 'AVAILABLE' || sector.queueCount === 0
-                            ? 'bg-slate-800 border-slate-700 text-slate-500 cursor-not-allowed opacity-50'
-                            : 'bg-indigo-900/40 border-indigo-500/50 text-indigo-300 hover:bg-indigo-900/60 hover:border-indigo-400 hover:shadow-indigo-500/10'
-                        }`}
-                    >
-                        <Users className="w-5 h-5" />
-                        <span className="text-lg tracking-tight uppercase">Chamar em Lote</span>
-                    </button>
-                )}
-
                 {/* New: Ordem de Atendimento (In-Service List) */}
                 {sector && (
                     <button
@@ -495,17 +463,6 @@ const Controller: React.FC = () => {
                     onClose={() => setIsDashboardOpen(false)}
                     sectorId={sector.id}
                     sectorName={sector.name}
-                />
-            )}
-
-            {sector && (
-                <ArrivalOrderModal
-                    isOpen={isArrivalOrderOpen}
-                    onClose={() => setIsArrivalOrderOpen(false)}
-                    sectorId={sector.id}
-                    maxBatchSize={sector.maxBatchSize || 1}
-                    currentInServiceCount={inServiceCount}
-                    onCallSuccess={handleBatchCallSuccess}
                 />
             )}
 

@@ -35,7 +35,7 @@ model Sector {
   status       String   @default("AVAILABLE") // AVAILABLE | BUSY | AWAY
   queueCount   Int      @default(0)
   soundUrl     String?  // URL do áudio de chamada específico do setor
-  maxBatchSize Int      @default(1) // Limite de chamadas simultâneas em lote
+  callCooldown Int      @default(120) // Tempo em segundos de espera mandatória entre cada chamada
   user         User?
   visits       Visit[]
   createdAt    DateTime @default(now())

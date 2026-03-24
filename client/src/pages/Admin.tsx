@@ -7,7 +7,7 @@ import { API_URL } from '../config/apiConfig';
 interface Sector {
     id: string;
     name: string;
-    maxBatchSize: number;
+    callCooldown: number;
     soundUrl: string | null;
 }
 
@@ -49,7 +49,7 @@ const Admin: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'users' | 'sectors'>('users');
     const [editingSector, setEditingSector] = useState<Sector | null>(null);
     const [editSectorName, setEditSectorName] = useState('');
-    const [editBatchSize, setEditBatchSize] = useState(1);
+    const [editCallCooldown, setEditCallCooldown] = useState(120);
 
     useEffect(() => {
         fetchData();
@@ -174,7 +174,7 @@ const Admin: React.FC = () => {
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                 body: JSON.stringify({
                     name: editSectorName,
-                    maxBatchSize: editBatchSize
+                    callCooldown: editCallCooldown
                 })
             });
 
@@ -358,7 +358,7 @@ const Admin: React.FC = () => {
                                 <thead className="bg-slate-50 border-b border-slate-200">
                                     <tr>
                                         <th className="px-6 py-4 font-semibold text-slate-700">Nome do Setor</th>
-                                        <th className="px-6 py-4 font-semibold text-slate-700">Chamadas em Lote (Máx)</th>
+                                        <th className="px-6 py-4 font-semibold text-slate-700">Espera da Fila (Cooldown)</th>
                                         <th className="px-6 py-4 font-semibold text-slate-700 text-right">Ação</th>
                                     </tr>
                                 </thead>
@@ -373,18 +373,18 @@ const Admin: React.FC = () => {
                                         <tr key={s.id} className="hover:bg-slate-50 transition-colors">
                                             <td className="px-6 py-4 font-bold text-slate-900">{s.name}</td>
                                             <td className="px-6 py-4 font-mono text-blue-600 font-bold">
-                                                {s.maxBatchSize || 1} tickets simultâneos
+                                                {s.callCooldown || 120} segundos
                                             </td>
                                             <td className="px-6 py-4 text-right flex justify-end gap-2">
                                                 <button
                                                     onClick={() => {
                                                         setEditingSector(s);
                                                         setEditSectorName(s.name);
-                                                        setEditBatchSize(s.maxBatchSize || 1);
+                                                        setEditCallCooldown(s.callCooldown || 120);
                                                     }}
                                                     className="px-4 py-2 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white rounded-lg transition-all font-bold text-sm"
                                                 >
-                                                    Configurar Lote
+                                                    Configurar Intervalo
                                                 </button>
                                             </td>
                                         </tr>
@@ -476,7 +476,7 @@ const Admin: React.FC = () => {
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
                     <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
                         <div className="p-6">
-                            <h3 className="text-xl font-bold text-slate-900 mb-2">Configurar Chamada em Lote</h3>
+                            <h3 className="text-xl font-bold text-slate-900 mb-2">Configurar Tempo de Espera</h3>
                             <p className="text-slate-600 mb-6 font-medium">
                                 Definindo limites para o setor: <strong className="text-blue-600">{editingSector.name}</strong>
                             </p>
@@ -494,20 +494,21 @@ const Admin: React.FC = () => {
 
                                     <div>
                                         <label className="block text-sm font-bold text-slate-700 mb-1">
-                                            Limite de Chamada Simultânea (Lote)
+                                            Intevalo Mínimo entre as Chamadas (s)
                                         </label>
                                         <div className="flex items-center gap-4 mt-2">
                                             <input
-                                                type="range" min={1} max={10} step={1}
-                                                value={editBatchSize} onChange={e => setEditBatchSize(parseInt(e.target.value))}
+                                                type="range" min={0} max={600} step={10}
+                                                value={editCallCooldown} onChange={e => setEditCallCooldown(parseInt(e.target.value))}
                                                 className="flex-1 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
                                             />
-                                            <span className="w-10 h-10 flex items-center justify-center bg-blue-600 text-white rounded-lg font-black text-xl">
-                                                {editBatchSize}
-                                            </span>
+                                            <div className="w-16 h-10 flex flex-col items-center justify-center bg-blue-600 text-white rounded-lg font-black leading-none">
+                                                <span className="text-[16px] leading-[14px] pt-1">{editCallCooldown}</span>
+                                                <span className="text-[9px] opacity-80 uppercase tracking-widest font-bold">segs</span>
+                                            </div>
                                         </div>
                                         <p className="text-[10px] text-slate-500 mt-2 italic uppercase font-bold tracking-tighter leading-tight">
-                                            * Define quantos cidadãos podem ser chamados simultaneamente através da funcionalidade de chamada em lote.
+                                            * Define quantos segundos a recepção e demais usuários deste setor deverão obrigatoriamente aguardar para clicar em "Chamar Próximo" novamente.
                                         </p>
                                     </div>
                                 </div>
