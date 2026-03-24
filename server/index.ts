@@ -107,8 +107,8 @@ app.get('/api/sectors', async (req, res) => {
             orderBy: { name: 'asc' },
         });
         res.json(sectors);
-    } catch (error) {
-        res.status(500).json({ error: 'Failed to fetch sectors' });
+    } catch (error: any) {
+        res.status(500).json({ error: 'Failed to fetch sectors', details: error.message, stack: error.stack });
     }
 });
 
