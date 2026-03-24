@@ -11,7 +11,7 @@ interface Ticket {
   code: string;
   sectorName: string;
   citizenName: string; // Adicionado para chamado por voz
-  status: 'IN_SERVICE' | 'WAITING';
+  status: 'IN_SERVICE' | 'WAITING' | 'IN_WAITING_ROOM';
   timestamp: string;
 }
 
@@ -34,7 +34,7 @@ const COLORS = {
 
 // ── Helper to determine ticket visual status ────────────────────────────────
 const getTicketStatusInfo = (ticket: Ticket, indexInList: number) => {
-  if (ticket.status === 'IN_SERVICE') {
+  if (ticket.status === 'IN_SERVICE' || ticket.status === 'IN_WAITING_ROOM') {
     return { label: 'Em atendimento', color: COLORS.inService, bg: 'rgba(34,197,94,0.1)' };
   }
   if (indexInList < 2) {
@@ -82,8 +82,8 @@ const QueueDisplay: React.FC = () => {
       if (!res.ok) return;
       const json: DisplayData = await res.json();
 
-      const filteredTickets = json.tickets.filter(t => t.status === 'IN_SERVICE' || t.status === 'WAITING');
-      const inService = filteredTickets.filter(t => t.status === 'IN_SERVICE');
+      const filteredTickets = json.tickets.filter(t => t.status === 'IN_SERVICE' || t.status === 'IN_WAITING_ROOM' || t.status === 'WAITING');
+      const inService = filteredTickets.filter(t => t.status === 'IN_SERVICE' || t.status === 'IN_WAITING_ROOM');
 
       // Detect new calls
       const newCalls = inService.filter(t => !processedIdsRef.current.has(t.id));
@@ -191,7 +191,7 @@ const QueueDisplay: React.FC = () => {
   }, [fetchData]);
 
   // ── Derived state ──────────────────────────────────────────────────────────
-  const inServiceTickets = data.tickets.filter(t => t.status === 'IN_SERVICE');
+  const inServiceTickets = data.tickets.filter(t => t.status === 'IN_SERVICE' || t.status === 'IN_WAITING_ROOM');
 
   // Ignora visualmente os tickets que ainda estão na fila invisível assíncrona
   const callQueueIds = new Set(callQueue.map(t => t.id));

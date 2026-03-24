@@ -401,7 +401,7 @@ const Controller: React.FC = () => {
                                      <li key={p.id} className="bg-slate-900/50 border border-slate-700 p-3 rounded-lg flex justify-between items-center">
                                          <div>
                                             <span className="text-white font-bold block">{p.citizen.name}</span>
-                                            <span className="text-xs text-slate-400 font-mono">Ticket: {p.code}</span>
+                                            <span className="text-xs text-slate-400 font-mono">CPF: {p.citizen.cpf}</span>
                                          </div>
                                      </li>
                                  ))}
