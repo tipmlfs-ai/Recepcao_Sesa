@@ -2,11 +2,10 @@ import React, { useMemo, useEffect, useRef, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom';
 import { useRealTimeStatus } from '../useRealTimeStatus';
 import { useAuth } from '../contexts/AuthContext';
-import { LogOut, CheckCircle2, AlertTriangle, ShieldAlert, Users, PhoneCall, Hash, CheckCheck, BarChart3, ClipboardList, Loader2 } from 'lucide-react';
+import { LogOut, CheckCircle2, AlertTriangle, ShieldAlert, Users, PhoneCall, Hash, CheckCheck, BarChart3, Loader2 } from 'lucide-react';
 import { API_URL } from '../config/apiConfig';
 import { toast } from 'sonner';
 import { SectorDashboardModal } from '../components/SectorDashboardModal';
-import { InServiceOrderModal } from '../components/InServiceOrderModal';
 
 const Controller: React.FC = () => {
     const { user, logout } = useAuth();
@@ -20,7 +19,6 @@ const Controller: React.FC = () => {
     const [cooldown, setCooldown] = useState(0);
     const [currentCitizen, setCurrentCitizen] = useState<{ name: string } | null>(null);
     const [isDashboardOpen, setIsDashboardOpen] = useState(false);
-    const [isInServiceOrderOpen, setIsInServiceOrderOpen] = useState(false);
     const [waitingRoomPatients, setWaitingRoomPatients] = useState<any[]>([]);
     const [callingToWaitingRoom, setCallingToWaitingRoom] = useState(false);
 
@@ -579,14 +577,6 @@ const Controller: React.FC = () => {
                     onClose={() => setIsDashboardOpen(false)}
                     sectorId={sector.id}
                     sectorName={sector.name}
-                />
-            )}
-
-            {sector && (
-                <InServiceOrderModal
-                    isOpen={isInServiceOrderOpen}
-                    onClose={() => setIsInServiceOrderOpen(false)}
-                    sectorId={sector.id}
                 />
             )}
         </div>
