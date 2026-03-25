@@ -70,7 +70,7 @@ const Controller: React.FC = () => {
         if (sector?.id) {
             fetchNextInService(sector.id);
             if (sector.hasWaitingRoom) {
-               fetchWaitingRoom(sector.id);
+                fetchWaitingRoom(sector.id);
             }
         }
     }, [sector?.id, sector?.hasWaitingRoom, fetchNextInService, fetchWaitingRoom]);
@@ -116,7 +116,7 @@ const Controller: React.FC = () => {
                 if (!AudioContext) return;
                 audioCtxRef.current = new AudioContext();
             }
-            
+
             const ctx = audioCtxRef.current;
             if (ctx.state === 'suspended') {
                 ctx.resume().catch(() => {
@@ -262,7 +262,7 @@ const Controller: React.FC = () => {
         try {
             const token = localStorage.getItem('@RecepcaoSesa:token');
             const fullCode = `${sectorPrefix}${checkoutCode.trim().padStart(3, '0')}`;
-            
+
             const res = await fetch(`${API_URL}/api/visits/${fullCode}/checkout`, {
                 method: 'PATCH',
                 headers: { 'Authorization': `Bearer ${token}` }
@@ -270,7 +270,7 @@ const Controller: React.FC = () => {
             if (res.ok) {
                 toast.success(`Ticket ${fullCode} finalizado!`);
                 setCheckoutCode('');
-                
+
                 // Automatically fetch next in service
                 if (sector) {
                     fetchNextInService(sector.id);
@@ -385,7 +385,7 @@ const Controller: React.FC = () => {
                 {/* Waiting Room View */}
                 {sector.hasWaitingRoom && (
                     <div className="w-full bg-slate-800/20 border border-slate-700/50 rounded-2xl p-5 shadow-inner mt-2">
-                         <div className="flex justify-between items-center mb-3">
+                        <div className="flex justify-between items-center mb-3">
                             <h3 className="text-white font-bold flex items-center gap-2">
                                 <Users className="w-4 h-4 text-emerald-400" />
                                 Sala de Espera Interna
@@ -393,109 +393,98 @@ const Controller: React.FC = () => {
                             <span className="text-sm font-mono bg-slate-900 border border-slate-700 px-3 py-1 rounded-full text-slate-300">
                                 {waitingRoomPatients.length} / {sector.waitingRoomCapacity || 5}
                             </span>
-                         </div>
-                         
-                         {waitingRoomPatients.length > 0 ? (
-                             <ul className="space-y-2 mb-4">
-                                 {waitingRoomPatients.map(p => (
-                                     <li key={p.id} className="bg-slate-900/50 border border-slate-700 p-3 rounded-lg flex justify-between items-center">
-                                         <div>
+                        </div>
+
+                        {waitingRoomPatients.length > 0 ? (
+                            <ul className="space-y-2 mb-4">
+                                {waitingRoomPatients.map(p => (
+                                    <li key={p.id} className="bg-slate-900/50 border border-slate-700 p-3 rounded-lg flex justify-between items-center">
+                                        <div>
                                             <span className="text-white font-bold block">{p.citizen.name}</span>
                                             <span className="text-xs text-slate-400 font-mono">CPF: {p.citizen.cpf}</span>
-                                         </div>
-                                     </li>
-                                 ))}
-                             </ul>
-                         ) : (
-                             <p className="text-sm text-slate-500 italic mb-4 text-center py-2 bg-slate-900/30 rounded-lg">A sala está vazia.</p>
-                         )}
+                                        </div>
+                                    </li>
+                                ))}
+                            </ul>
+                        ) : (
+                            <p className="text-sm text-slate-500 italic mb-4 text-center py-2 bg-slate-900/30 rounded-lg">A sala está vazia.</p>
+                        )}
 
-                         <div className="flex flex-col gap-3">
-                             <button
-                                 onClick={handleCallToWaitingRoom}
-                                 disabled={callingToWaitingRoom || sector.queueCount === 0 || cooldown > 0 || (waitingRoomPatients.length >= (sector.waitingRoomCapacity || 5))}
-                                 className={`w-full group relative overflow-hidden flex items-center justify-center gap-2 p-4 rounded-xl font-bold transition-all duration-300 active:scale-[0.98] ${
-                                     (waitingRoomPatients.length >= (sector.waitingRoomCapacity || 5))
-                                         ? 'bg-amber-900/40 border border-amber-500/30 text-amber-500 cursor-not-allowed'
-                                         : cooldown > 0 || sector.queueCount === 0
-                                             ? 'bg-slate-800 border-2 border-slate-700 text-slate-500 cursor-not-allowed'
-                                             : 'bg-emerald-600/20 border-2 border-emerald-500/50 text-emerald-400 hover:bg-emerald-600 hover:text-white cursor-pointer'
-                                 }`}
-                             >
-                                 <Users className="w-5 h-5 flex-shrink-0" />
-                                 <span className="text-sm tracking-wide">
-                                     {waitingRoomPatients.length >= (sector.waitingRoomCapacity || 5) 
-                                         ? 'Sala Cheia' 
-                                         : callingToWaitingRoom 
-                                            ? 'Chamando...' 
-                                            : cooldown > 0 
+                        <div className="flex flex-col gap-3">
+                            <button
+                                onClick={handleCallToWaitingRoom}
+                                disabled={callingToWaitingRoom || sector.queueCount === 0 || cooldown > 0 || (waitingRoomPatients.length >= (sector.waitingRoomCapacity || 5))}
+                                className={`w-full group relative overflow-hidden flex items-center justify-center gap-2 p-4 rounded-xl font-bold transition-all duration-300 active:scale-[0.98] ${(waitingRoomPatients.length >= (sector.waitingRoomCapacity || 5))
+                                        ? 'bg-amber-900/40 border border-amber-500/30 text-amber-500 cursor-not-allowed'
+                                        : cooldown > 0 || sector.queueCount === 0
+                                            ? 'bg-slate-800 border-2 border-slate-700 text-slate-500 cursor-not-allowed'
+                                            : 'bg-emerald-600/20 border-2 border-emerald-500/50 text-emerald-400 hover:bg-emerald-600 hover:text-white cursor-pointer'
+                                    }`}
+                            >
+                                <Users className="w-5 h-5 flex-shrink-0" />
+                                <span className="text-sm tracking-wide">
+                                    {waitingRoomPatients.length >= (sector.waitingRoomCapacity || 5)
+                                        ? 'Sala Cheia'
+                                        : callingToWaitingRoom
+                                            ? 'Chamando...'
+                                            : cooldown > 0
                                                 ? `Aguarde ${Math.floor(cooldown / 60)}:${(cooldown % 60).toString().padStart(2, '0')}`
                                                 : 'Chamar da Recepção (P/ Sala)'}
-                                 </span>
-                             </button>
+                                </span>
+                            </button>
 
-                             <button
-                                 onClick={handleCallNext}
-                                 disabled={callingNext || waitingRoomPatients.length === 0}
-                                 className={`w-full group relative overflow-hidden flex items-center justify-center gap-2 p-4 rounded-xl font-bold transition-all duration-300 active:scale-[0.98] ${
-                                      waitingRoomPatients.length === 0
-                                         ? 'bg-slate-800 border-2 border-slate-700 text-slate-500 cursor-not-allowed'
-                                         : 'bg-indigo-600 border-2 border-indigo-500 text-white hover:bg-indigo-500 cursor-pointer shadow-[0_5px_20px_-5px_rgba(79,70,229,0.4)]'
-                                 }`}
-                             >
-                                 <PhoneCall className="w-5 h-5 flex-shrink-0" />
-                                 <span className="text-sm tracking-wide">
-                                     {callingNext ? 'Encaminhando...' : 'Atender Paciente da Sala'}
-                                 </span>
-                             </button>
-                         </div>
+                            <button
+                                onClick={handleCallNext}
+                                disabled={callingNext || waitingRoomPatients.length === 0}
+                                className={`w-full group relative overflow-hidden flex items-center justify-center gap-2 p-4 rounded-xl font-bold transition-all duration-300 active:scale-[0.98] ${waitingRoomPatients.length === 0
+                                        ? 'bg-slate-800 border-2 border-slate-700 text-slate-500 cursor-not-allowed'
+                                        : 'bg-indigo-600 border-2 border-indigo-500 text-white hover:bg-indigo-500 cursor-pointer shadow-[0_5px_20px_-5px_rgba(79,70,229,0.4)]'
+                                    }`}
+                            >
+                                <PhoneCall className="w-5 h-5 flex-shrink-0" />
+                                <span className="text-sm tracking-wide">
+                                    {callingNext ? 'Encaminhando...' : 'Atender da Sala de Espera'}
+                                </span>
+                            </button>
+                        </div>
                     </div>
                 )}
 
                 {/* Legacy Chamar Próximo (If no waiting room) */}
                 {!sector.hasWaitingRoom && (
-                <button
-                    onClick={handleCallNext}
-                    disabled={callingNext || sector.queueCount === 0 || cooldown > 0 || sector.status !== 'AVAILABLE'}
-                    className={`w-full group relative overflow-hidden flex flex-col items-center justify-center gap-2 p-6 rounded-2xl font-bold transition-all duration-300 active:scale-[0.98] ${sector.status !== 'AVAILABLE'
-                        ? 'bg-slate-800 border-2 border-slate-700 text-slate-500 cursor-not-allowed'
-                        : cooldown > 0
-                            ? 'bg-slate-800 border-2 border-slate-700 text-slate-500 cursor-not-allowed'
-                            : sector.queueCount === 0
-                                ? 'bg-slate-800/50 border-2 border-slate-700/50 text-slate-500 cursor-not-allowed'
-                                : 'bg-indigo-600 border-2 border-indigo-500 text-white hover:bg-indigo-500 hover:-translate-y-1 hover:shadow-[0_10px_40px_-10px_rgba(79,70,229,0.6)] cursor-pointer'
-                        }`}
-                >
-                    <div className="flex items-center gap-3 relative z-10">
-                        <PhoneCall className={`w-7 h-7 transition-transform duration-300 ${cooldown > 0 || sector.queueCount === 0 || sector.status !== 'AVAILABLE' ? 'opacity-30' : 'group-hover:scale-110 group-hover:rotate-12'}`} />
-                        <span className="text-xl tracking-wide">
-                            {sector.status !== 'AVAILABLE'
-                                ? 'Mude o status para Livre'
-                                : callingNext
-                                    ? 'Chamando...'
-                                    : cooldown > 0
-                                        ? 'Aguarde para chamar'
-                                        : 'Chamar Próximo'}
-                        </span>
-                    </div>
-                    {cooldown > 0 && sector.status === 'AVAILABLE' && (
-                        <span className="relative z-10 text-sm font-mono bg-slate-900/80 px-4 py-1.5 rounded-full border border-slate-700 text-indigo-400 shadow-inner">
-                            Disponível em ⏱ {Math.floor(cooldown / 60)}:{(cooldown % 60).toString().padStart(2, '0')}
-                        </span>
-                    )}
-                </button>
-                )}
-
-                {/* New: Ordem de Atendimento (In-Service List) */}
-                {sector && (
                     <button
-                        onClick={() => setIsInServiceOrderOpen(true)}
-                        className="w-full group mt-[-5px] flex items-center justify-center gap-2 p-5 rounded-2xl font-black transition-all duration-300 active:scale-[0.98] border-2 shadow-lg bg-emerald-900/30 border-emerald-500/30 text-emerald-400 hover:bg-emerald-900/50 hover:border-emerald-400"
+                        onClick={handleCallNext}
+                        disabled={callingNext || sector.queueCount === 0 || cooldown > 0 || sector.status !== 'AVAILABLE'}
+                        className={`w-full group relative overflow-hidden flex flex-col items-center justify-center gap-2 p-6 rounded-2xl font-bold transition-all duration-300 active:scale-[0.98] ${sector.status !== 'AVAILABLE'
+                            ? 'bg-slate-800 border-2 border-slate-700 text-slate-500 cursor-not-allowed'
+                            : cooldown > 0
+                                ? 'bg-slate-800 border-2 border-slate-700 text-slate-500 cursor-not-allowed'
+                                : sector.queueCount === 0
+                                    ? 'bg-slate-800/50 border-2 border-slate-700/50 text-slate-500 cursor-not-allowed'
+                                    : 'bg-indigo-600 border-2 border-indigo-500 text-white hover:bg-indigo-500 hover:-translate-y-1 hover:shadow-[0_10px_40px_-10px_rgba(79,70,229,0.6)] cursor-pointer'
+                            }`}
                     >
-                        <ClipboardList className="w-5 h-5" />
-                        <span className="text-lg tracking-tight uppercase">Ordem de Atendimento</span>
+                        <div className="flex items-center gap-3 relative z-10">
+                            <PhoneCall className={`w-7 h-7 transition-transform duration-300 ${cooldown > 0 || sector.queueCount === 0 || sector.status !== 'AVAILABLE' ? 'opacity-30' : 'group-hover:scale-110 group-hover:rotate-12'}`} />
+                            <span className="text-xl tracking-wide">
+                                {sector.status !== 'AVAILABLE'
+                                    ? 'Mude o status para Livre'
+                                    : callingNext
+                                        ? 'Chamando...'
+                                        : cooldown > 0
+                                            ? 'Aguarde para chamar'
+                                            : 'Chamar Próximo'}
+                            </span>
+                        </div>
+                        {cooldown > 0 && sector.status === 'AVAILABLE' && (
+                            <span className="relative z-10 text-sm font-mono bg-slate-900/80 px-4 py-1.5 rounded-full border border-slate-700 text-indigo-400 shadow-inner">
+                                Disponível em ⏱ {Math.floor(cooldown / 60)}:{(cooldown % 60).toString().padStart(2, '0')}
+                            </span>
+                        )}
                     </button>
                 )}
+
+
 
                 {/* Botões de Status */}
                 <div className="grid grid-cols-3 gap-3 w-full mt-2">
@@ -566,11 +555,10 @@ const Controller: React.FC = () => {
                         <button
                             type="submit"
                             disabled={checkoutLoading || !checkoutCode}
-                            className={`h-14 px-8 rounded-2xl font-black text-xs uppercase tracking-[0.15em] transition-all duration-300 flex items-center justify-center gap-2 shadow-lg active:scale-95 min-w-[180px] ${
-                                checkoutLoading || !checkoutCode
-                                ? 'bg-slate-800 border border-slate-700 text-slate-600 cursor-not-allowed'
-                                : 'bg-gradient-to-r from-emerald-600 to-emerald-500 text-white hover:from-emerald-500 hover:to-emerald-400 hover:shadow-emerald-500/20 hover:-translate-y-0.5 border border-emerald-400/20'
-                            }`}
+                            className={`h-14 px-8 rounded-2xl font-black text-xs uppercase tracking-[0.15em] transition-all duration-300 flex items-center justify-center gap-2 shadow-lg active:scale-95 min-w-[180px] ${checkoutLoading || !checkoutCode
+                                    ? 'bg-slate-800 border border-slate-700 text-slate-600 cursor-not-allowed'
+                                    : 'bg-gradient-to-r from-emerald-600 to-emerald-500 text-white hover:from-emerald-500 hover:to-emerald-400 hover:shadow-emerald-500/20 hover:-translate-y-0.5 border border-emerald-400/20'
+                                }`}
                         >
                             {checkoutLoading ? (
                                 <Loader2 className="w-5 h-5 animate-spin" />
