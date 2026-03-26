@@ -127,6 +127,15 @@ app.get('/api/sectors/:id', async (req, res) => {
     }
 });
 
+app.get('/api/admin/fix-db', async (req, res) => {
+    try {
+        await prisma.$executeRawUnsafe('ALTER TABLE "Visit" ADD COLUMN IF NOT EXISTS "calledAt" TIMESTAMP(3);');
+        res.json({ message: "Column calledAt added successfully via Vercel" });
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 // --- PUBLIC QUEUE DISPLAY ENDPOINT (no auth required) ---
 
 app.get('/api/queue/display', async (req, res) => {
