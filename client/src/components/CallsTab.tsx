@@ -11,6 +11,7 @@ interface CallRecord {
     ticketStatus: string | null;
     citizen: { name: string };
     sector: { name: string };
+    calledAt?: string | null;
 }
 
 const CallsTab: React.FC = () => {
@@ -27,10 +28,14 @@ const CallsTab: React.FC = () => {
 
             if (res.ok) {
                 const data: CallRecord[] = await res.json();
-                // Filter only those who are actively being called (IN_SERVICE)
+                // Filter all visits that have been called (have a code)
                 const filtered = data
-                    .filter(v => v.ticketStatus === 'IN_SERVICE' && v.code)
-                    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+                    .filter(v => v.code)
+                    .sort((a, b) => {
+                        const timeA = a.calledAt ? new Date(a.calledAt).getTime() : new Date(a.timestamp).getTime();
+                        const timeB = b.calledAt ? new Date(b.calledAt).getTime() : new Date(b.timestamp).getTime();
+                        return timeB - timeA;
+                    });
                 setCalls(filtered);
             }
         } catch (error) {

@@ -612,51 +612,53 @@ const Controller: React.FC = () => {
                 </div>
 
                 {/* Seção Operacional: Dar Baixa */}
-                <div className="w-full bg-slate-800/40 backdrop-blur-xl border border-slate-700/50 rounded-3xl p-6 mt-4 shadow-2xl transition-all duration-300 hover:border-emerald-500/20">
-                    <div className="flex items-center gap-3 mb-5 px-1">
-                        <div className="p-2 bg-emerald-500/10 rounded-lg border border-emerald-500/20">
-                            <CheckCheck className="w-5 h-5 text-emerald-400" />
-                        </div>
-                        <div>
-                            <h3 className="text-white font-black text-sm uppercase tracking-widest">Finalizar Atendimento</h3>
-                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter">Digite o ticket para dar baixa no sistema</p>
-                        </div>
-                    </div>
-
-                    <form onSubmit={handleCheckout} className="flex flex-col sm:flex-row gap-3 items-stretch">
-                        <div className="flex-1 relative group">
-                            <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-2 pointer-events-none z-10">
-                                <Hash className="w-4 h-4 text-slate-500 group-focus-within:text-emerald-400 transition-colors" />
-                                <span className="text-slate-500 font-black text-xs border-r border-slate-700/50 pr-2 group-focus-within:text-emerald-500/50 group-focus-within:border-emerald-500/30 transition-all uppercase">{sectorPrefix}</span>
+                {currentCitizen && (
+                    <div className="w-full bg-slate-800/40 backdrop-blur-xl border border-slate-700/50 rounded-3xl p-6 mt-4 shadow-2xl transition-all duration-300 hover:border-emerald-500/20">
+                        <div className="flex items-center gap-3 mb-5 px-1">
+                            <div className="p-2 bg-emerald-500/10 rounded-lg border border-emerald-500/20">
+                                <CheckCheck className="w-5 h-5 text-emerald-400" />
                             </div>
-                            <input
-                                type="text"
-                                value={checkoutCode}
-                                onChange={(e) => setCheckoutCode(e.target.value.toUpperCase())}
-                                placeholder="000"
-                                className="w-full h-14 bg-slate-900/50 border-2 border-slate-700/50 rounded-2xl pl-20 pr-4 text-white placeholder-slate-700 focus:outline-none focus:border-emerald-500/50 focus:bg-slate-900 transition-all font-black text-xl tracking-[0.2em] shadow-inner"
-                                maxLength={4}
-                            />
+                            <div>
+                                <h3 className="text-white font-black text-sm uppercase tracking-widest">Finalizar Atendimento</h3>
+                                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter">Digite o ticket para dar baixa no sistema</p>
+                            </div>
                         </div>
-                        <button
-                            type="submit"
-                            disabled={checkoutLoading || !checkoutCode}
-                            className={`h-14 px-8 rounded-2xl font-black text-xs uppercase tracking-[0.15em] transition-all duration-300 flex items-center justify-center gap-2 shadow-lg active:scale-95 min-w-[180px] ${checkoutLoading || !checkoutCode
-                                    ? 'bg-slate-800 border border-slate-700 text-slate-600 cursor-not-allowed'
-                                    : 'bg-gradient-to-r from-emerald-600 to-emerald-500 text-white hover:from-emerald-500 hover:to-emerald-400 hover:shadow-emerald-500/20 hover:-translate-y-0.5 border border-emerald-400/20'
-                                }`}
-                        >
-                            {checkoutLoading ? (
-                                <Loader2 className="w-5 h-5 animate-spin" />
-                            ) : (
-                                <>
-                                    <span>Dar Baixa</span>
-                                    <CheckCheck className="w-4 h-4 opacity-50" />
-                                </>
-                            )}
-                        </button>
-                    </form>
-                </div>
+
+                        <form onSubmit={handleCheckout} className="flex flex-col sm:flex-row gap-3 items-stretch">
+                            <div className="flex-1 relative group">
+                                <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-2 pointer-events-none z-10">
+                                    <Hash className="w-4 h-4 text-slate-500 group-focus-within:text-emerald-400 transition-colors" />
+                                    <span className="text-slate-500 font-black text-xs border-r border-slate-700/50 pr-2 group-focus-within:text-emerald-500/50 group-focus-within:border-emerald-500/30 transition-all uppercase">{sectorPrefix}</span>
+                                </div>
+                                <input
+                                    type="text"
+                                    value={checkoutCode}
+                                    onChange={(e) => setCheckoutCode(e.target.value.toUpperCase())}
+                                    placeholder="000"
+                                    className="w-full h-14 bg-slate-900/50 border-2 border-slate-700/50 rounded-2xl pl-20 pr-4 text-white placeholder-slate-700 focus:outline-none focus:border-emerald-500/50 focus:bg-slate-900 transition-all font-black text-xl tracking-[0.2em] shadow-inner"
+                                    maxLength={4}
+                                />
+                            </div>
+                            <button
+                                type="submit"
+                                disabled={checkoutLoading || !checkoutCode}
+                                className={`h-14 px-8 rounded-2xl font-black text-xs uppercase tracking-[0.15em] transition-all duration-300 flex items-center justify-center gap-2 shadow-lg active:scale-95 min-w-[180px] ${checkoutLoading || !checkoutCode
+                                        ? 'bg-slate-800 border border-slate-700 text-slate-600 cursor-not-allowed'
+                                        : 'bg-gradient-to-r from-emerald-600 to-emerald-500 text-white hover:from-emerald-500 hover:to-emerald-400 hover:shadow-emerald-500/20 hover:-translate-y-0.5 border border-emerald-400/20'
+                                    }`}
+                            >
+                                {checkoutLoading ? (
+                                    <Loader2 className="w-5 h-5 animate-spin" />
+                                ) : (
+                                    <>
+                                        <span>Dar Baixa</span>
+                                        <CheckCheck className="w-4 h-4 opacity-50" />
+                                    </>
+                                )}
+                            </button>
+                        </form>
+                    </div>
+                )}
             </main>
 
             {sector && (
