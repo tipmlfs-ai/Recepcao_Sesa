@@ -13,6 +13,7 @@ interface Ticket {
   citizenName: string; // Adicionado para chamado por voz
   status: 'IN_SERVICE' | 'WAITING' | 'IN_WAITING_ROOM';
   timestamp: string;
+  calledAt?: string | null;
 }
 
 interface DisplayData {
@@ -33,14 +34,20 @@ const COLORS = {
 // Audio handled by global audioManager
 
 // ── Helper to determine ticket visual status ────────────────────────────────
-const getTicketStatusInfo = (ticket: Ticket, indexInList: number) => {
+const getTicketStatusInfo = (ticket: Ticket, indexInList: number, nowMs: number) => {
   if (ticket.status === 'IN_SERVICE' || ticket.status === 'IN_WAITING_ROOM') {
-    return { label: 'Em atendimento', color: COLORS.inService, bg: 'rgba(34,197,94,0.1)' };
+    if (ticket.calledAt) {
+      const waitTime = (nowMs - new Date(ticket.calledAt).getTime()) / 1000;
+      if (waitTime >= 300) { // 5 minutes
+        return { label: 'Tempo Esgotado', color: '#EAB308', bg: 'rgba(234, 179, 8, 0.1)', isExpired: true };
+      }
+    }
+    return { label: 'Em atendimento', color: COLORS.inService, bg: 'rgba(34,197,94,0.1)', isExpired: false };
   }
   if (indexInList < 2) {
-    return { label: 'Próximo', color: COLORS.next, bg: 'rgba(245,158,11,0.1)' };
+    return { label: 'Próximo', color: COLORS.next, bg: 'rgba(245,158,11,0.1)', isExpired: false };
   }
-  return { label: 'Aguardando', color: COLORS.waiting, bg: 'rgba(148,163,184,0.05)' };
+  return { label: 'Aguardando', color: COLORS.waiting, bg: 'rgba(148,163,184,0.05)', isExpired: false };
 };
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -48,6 +55,7 @@ const QueueDisplay: React.FC = () => {
   const { isUnlocked, unlockManual } = useAudioUnlock();
   const [data, setData] = useState<DisplayData>({ tickets: [], avgWaitMinutes: null });
   const [clock, setClock] = useState('');
+  const [nowMs, setNowMs] = useState(Date.now());
   const [heroKey, setHeroKey] = useState(0);
   const [heroGlow, setHeroGlow] = useState(false);
   const [callQueue, setCallQueue] = useState<Ticket[]>([]);
@@ -69,6 +77,7 @@ const QueueDisplay: React.FC = () => {
     const tick = () => {
       const now = new Date();
       setClock(now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
+      setNowMs(now.getTime());
     };
     tick();
     const id = setInterval(tick, 1000);
@@ -212,6 +221,9 @@ const QueueDisplay: React.FC = () => {
     .slice(-12)
     .reverse();
 
+  const heroInfo = heroTicket ? getTicketStatusInfo(heroTicket, 0, nowMs) : null;
+  const isHeroExpired = heroInfo?.isExpired;
+
   return (
     <div style={styles.page}>
       {/* ── HEADER ─────────────────────────────────────────────────────────── */}
@@ -231,12 +243,12 @@ const QueueDisplay: React.FC = () => {
       <main style={styles.main}>
         <section style={styles.heroSection}>
           {heroTicket ? (
-            <div key={heroKey} style={{ ...styles.heroCard, ...(heroGlow ? styles.heroCardGlow : {}) }}>
-              <p style={styles.heroSub}>SENHA CHAMADA</p>
-              <h1 style={styles.heroCode}>{heroTicket.code}</h1>
+            <div key={heroKey} style={{ ...styles.heroCard, ...(heroGlow ? styles.heroCardGlow : {}), ...(isHeroExpired ? { borderColor: 'rgba(234, 179, 8, 0.4)', background: 'rgba(234, 179, 8, 0.05)' } : {}) }}>
+              <p style={{...styles.heroSub, color: isHeroExpired ? '#EAB308' : '#64748B'}}>{isHeroExpired ? 'TEMPO DE ESPERA ESGOTADO' : 'SENHA CHAMADA'}</p>
+              <h1 style={{...styles.heroCode, color: isHeroExpired ? '#FDE047' : COLORS.white}}>{heroTicket.code}</h1>
               <div style={styles.heroStatus}>
-                <div style={styles.heroDot} />
-                <span>{heroTicket.sectorName}</span>
+                <div style={{...styles.heroDot, background: isHeroExpired ? '#EAB308' : COLORS.inService, boxShadow: isHeroExpired ? `0 0 15px #EAB308` : `0 0 15px ${COLORS.inService}`}} />
+                <span style={{color: isHeroExpired ? '#FDE047' : '#CBD5E1'}}>{heroTicket.sectorName}</span>
               </div>
               
               {/* Batch feedback */}
@@ -264,7 +276,7 @@ const QueueDisplay: React.FC = () => {
           <div style={styles.gridContainer}>
             {listTickets.length > 0 ? (
               listTickets.map((t, idx) => {
-                const info = getTicketStatusInfo(t, idx);
+                const info = getTicketStatusInfo(t, idx, nowMs);
                 return (
                   <div
                     key={t.id}

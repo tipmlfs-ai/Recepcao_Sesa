@@ -17,7 +17,10 @@ const Controller: React.FC = () => {
     const [checkoutLoading, setCheckoutLoading] = useState(false);
     const [callingNext, setCallingNext] = useState(false);
     const [cooldown, setCooldown] = useState(0);
-    const [currentCitizen, setCurrentCitizen] = useState<{ name: string } | null>(null);
+    const [currentCitizen, setCurrentCitizen] = useState<{ name: string, calledAt?: string, code?: string } | null>(null);
+    const [citizenWaitSeconds, setCitizenWaitSeconds] = useState(0);
+    const [showNoShowModal, setShowNoShowModal] = useState(false);
+    const [noShowLoading, setNoShowLoading] = useState(false);
     const [isDashboardOpen, setIsDashboardOpen] = useState(false);
     const [waitingRoomPatients, setWaitingRoomPatients] = useState<any[]>([]);
     const [callingToWaitingRoom, setCallingToWaitingRoom] = useState(false);
@@ -32,7 +35,7 @@ const Controller: React.FC = () => {
             if (res.ok) {
                 const data = await res.json();
                 if (data.length > 0) {
-                    setCurrentCitizen({ name: data[0].citizen.name });
+                    setCurrentCitizen({ name: data[0].citizen.name, calledAt: data[0].calledAt, code: data[0].code });
                 } else {
                     setCurrentCitizen(null);
                 }
@@ -104,6 +107,25 @@ const Controller: React.FC = () => {
         return () => clearInterval(timer);
     }, [sector?.id]);
 
+    // Citizen Wait Timer
+    useEffect(() => {
+        if (!currentCitizen || !currentCitizen.calledAt) {
+            setCitizenWaitSeconds(0);
+            return;
+        }
+
+        const calledAtDate = new Date(currentCitizen.calledAt).getTime();
+        
+        const updateCitizenTimer = () => {
+            const diff = Math.floor((Date.now() - calledAtDate) / 1000);
+            setCitizenWaitSeconds(diff > 0 ? diff : 0);
+        };
+
+        updateCitizenTimer();
+        const timer = setInterval(updateCitizenTimer, 1000);
+        return () => clearInterval(timer);
+    }, [currentCitizen]);
+
     const prevQueueRef = useRef(sector?.queueCount || 0);
     const audioCtxRef = useRef<AudioContext | null>(null);
 
@@ -162,7 +184,7 @@ const Controller: React.FC = () => {
                 if (res.ok) {
                     const visits = await res.json();
                     if (visits.length > 0) {
-                        setCurrentCitizen({ name: visits[0].citizen.name });
+                        setCurrentCitizen({ name: visits[0].citizen.name, calledAt: visits[0].calledAt, code: visits[0].code });
                     }
                 }
             } catch (error) {
@@ -192,7 +214,7 @@ const Controller: React.FC = () => {
 
                 // Set the persistent citizen info
                 if (data.citizen?.name) {
-                    setCurrentCitizen({ name: data.citizen.name });
+                    setCurrentCitizen({ name: data.citizen.name, calledAt: data.calledAt, code: data.code });
                 }
 
                 // Clear cooldown immediately on checkout to allow calling next
@@ -239,6 +261,46 @@ const Controller: React.FC = () => {
             toast.error('Erro de conexão');
         } finally {
             setCallingToWaitingRoom(false);
+        }
+    };
+
+    const handleNoShowConfirm = async () => {
+        if (!currentCitizen?.code) return;
+        setNoShowLoading(true);
+        try {
+            const token = localStorage.getItem('@RecepcaoSesa:token');
+            const res = await fetch(`${API_URL}/api/visits/${currentCitizen.code}/no-show`, {
+                method: 'PATCH',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                toast.success(`Atendimento encerrado (Não Comparecimento)`);
+                setShowNoShowModal(false);
+                
+                // Clear current citizen explicitly
+                setCurrentCitizen(null);
+
+                // Fetch next
+                if (sector) {
+                    fetchNextInService(sector.id);
+                    if (sector.hasWaitingRoom) {
+                        fetchWaitingRoom(sector.id);
+                    }
+                }
+
+                // Clear cooldown immediately
+                setCooldown(0);
+                if (sector) {
+                    localStorage.removeItem(`@RecepcaoSesa:cooldown:${sector.id}`);
+                }
+            } else {
+                const err = await res.json();
+                toast.error(err.error || 'Erro ao registrar não comparecimento');
+            }
+        } catch {
+            toast.error('Erro de conexão');
+        } finally {
+            setNoShowLoading(false);
         }
     };
 
@@ -373,10 +435,30 @@ const Controller: React.FC = () => {
 
                 {/* Persistent Called Citizen Card */}
                 {currentCitizen && (
-                    <div className="w-full bg-gradient-to-br from-indigo-900/40 to-slate-800/80 border border-indigo-500/30 rounded-2xl p-6 shadow-[0_0_40px_rgba(79,70,229,0.1)] animate-in slide-in-from-bottom-4 fade-in duration-500">
-                        <p className="text-indigo-400 text-sm font-bold tracking-widest uppercase mb-2">Em Atendimento</p>
-                        <p className="text-2xl font-bold text-white mb-1 truncate">{currentCitizen.name}</p>
-                        <p className="text-slate-400 text-sm">O cidadão acima foi chamado. Aguarde o comparecimento e digite o código do ticket para dar baixa.</p>
+                    <div className="w-full bg-gradient-to-br from-indigo-900/40 to-slate-800/80 border border-indigo-500/30 rounded-2xl p-6 shadow-[0_0_40px_rgba(79,70,229,0.1)] animate-in slide-in-from-bottom-4 fade-in duration-500 relative overflow-hidden">
+                        <div className="flex justify-between items-start mb-2">
+                            <p className="text-indigo-400 text-sm font-bold tracking-widest uppercase">Em Atendimento</p>
+                            {citizenWaitSeconds > 0 && (
+                                <div className="bg-slate-900/80 border border-slate-700 px-3 py-1 rounded-lg flex items-center gap-2 shadow-inner">
+                                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                                    <span className="text-emerald-400 font-mono text-sm font-bold">
+                                        {Math.floor(citizenWaitSeconds / 60).toString().padStart(2, '0')}:{(citizenWaitSeconds % 60).toString().padStart(2, '0')}
+                                    </span>
+                                </div>
+                            )}
+                        </div>
+                        <p className="text-2xl font-bold text-white mb-1 truncate pr-20">{currentCitizen.name}</p>
+                        <p className="text-slate-400 text-sm mb-4">O cidadão acima foi chamado. Aguarde o comparecimento e digite o código do ticket para dar baixa.</p>
+                        
+                        {cooldown === 0 && (
+                            <button
+                                onClick={() => setShowNoShowModal(true)}
+                                className="w-full mt-2 py-3 px-4 bg-rose-500/10 hover:bg-rose-500/20 border-2 border-rose-500/30 hover:border-rose-500/50 rounded-xl text-rose-400 font-bold transition-all flex items-center justify-center gap-2"
+                            >
+                                <AlertTriangle className="w-4 h-4" />
+                                <span>Encerrar por Tempo Esgotado</span>
+                            </button>
+                        )}
                     </div>
                 )}
 
@@ -433,15 +515,19 @@ const Controller: React.FC = () => {
 
                             <button
                                 onClick={handleCallNext}
-                                disabled={callingNext || waitingRoomPatients.length === 0}
-                                className={`w-full group relative overflow-hidden flex items-center justify-center gap-2 p-4 rounded-xl font-bold transition-all duration-300 active:scale-[0.98] ${waitingRoomPatients.length === 0
+                                disabled={callingNext || waitingRoomPatients.length === 0 || currentCitizen !== null}
+                                className={`w-full group relative overflow-hidden flex items-center justify-center gap-2 p-4 rounded-xl font-bold transition-all duration-300 active:scale-[0.98] ${(waitingRoomPatients.length === 0 || currentCitizen !== null)
                                         ? 'bg-slate-800 border-2 border-slate-700 text-slate-500 cursor-not-allowed'
                                         : 'bg-indigo-600 border-2 border-indigo-500 text-white hover:bg-indigo-500 cursor-pointer shadow-[0_5px_20px_-5px_rgba(79,70,229,0.4)]'
                                     }`}
                             >
                                 <PhoneCall className="w-5 h-5 flex-shrink-0" />
                                 <span className="text-sm tracking-wide">
-                                    {callingNext ? 'Encaminhando...' : 'Atender da Sala de Espera'}
+                                    {currentCitizen !== null
+                                        ? 'Finalize o atendimento atual'
+                                        : callingNext 
+                                            ? 'Encaminhando...' 
+                                            : 'Atender da Sala de Espera'}
                                 </span>
                             </button>
                         </div>
@@ -452,10 +538,10 @@ const Controller: React.FC = () => {
                 {!sector.hasWaitingRoom && (
                     <button
                         onClick={handleCallNext}
-                        disabled={callingNext || sector.queueCount === 0 || cooldown > 0 || sector.status !== 'AVAILABLE'}
+                        disabled={callingNext || sector.queueCount === 0 || cooldown > 0 || sector.status !== 'AVAILABLE' || currentCitizen !== null}
                         className={`w-full group relative overflow-hidden flex flex-col items-center justify-center gap-2 p-6 rounded-2xl font-bold transition-all duration-300 active:scale-[0.98] ${sector.status !== 'AVAILABLE'
                             ? 'bg-slate-800 border-2 border-slate-700 text-slate-500 cursor-not-allowed'
-                            : cooldown > 0
+                            : (cooldown > 0 || currentCitizen !== null)
                                 ? 'bg-slate-800 border-2 border-slate-700 text-slate-500 cursor-not-allowed'
                                 : sector.queueCount === 0
                                     ? 'bg-slate-800/50 border-2 border-slate-700/50 text-slate-500 cursor-not-allowed'
@@ -463,15 +549,17 @@ const Controller: React.FC = () => {
                             }`}
                     >
                         <div className="flex items-center gap-3 relative z-10">
-                            <PhoneCall className={`w-7 h-7 transition-transform duration-300 ${cooldown > 0 || sector.queueCount === 0 || sector.status !== 'AVAILABLE' ? 'opacity-30' : 'group-hover:scale-110 group-hover:rotate-12'}`} />
+                            <PhoneCall className={`w-7 h-7 transition-transform duration-300 ${(cooldown > 0 || sector.queueCount === 0 || sector.status !== 'AVAILABLE' || currentCitizen !== null) ? 'opacity-30' : 'group-hover:scale-110 group-hover:rotate-12'}`} />
                             <span className="text-xl tracking-wide">
                                 {sector.status !== 'AVAILABLE'
                                     ? 'Mude o status para Livre'
-                                    : callingNext
-                                        ? 'Chamando...'
-                                        : cooldown > 0
-                                            ? 'Aguarde para chamar'
-                                            : 'Chamar Próximo'}
+                                    : currentCitizen !== null
+                                        ? 'Finalize o atendimento atual'
+                                        : callingNext
+                                            ? 'Chamando...'
+                                            : cooldown > 0
+                                                ? 'Aguarde para chamar'
+                                                : 'Chamar Próximo'}
                             </span>
                         </div>
                         {cooldown > 0 && sector.status === 'AVAILABLE' && (
@@ -578,6 +666,60 @@ const Controller: React.FC = () => {
                     sectorId={sector.id}
                     sectorName={sector.name}
                 />
+            )}
+
+            {showNoShowModal && currentCitizen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                    <div className="bg-slate-800 border-2 border-rose-500/30 rounded-3xl p-6 md:p-8 max-w-sm w-full shadow-2xl relative overflow-hidden">
+                        <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-rose-600 to-rose-400"></div>
+                        <div className="flex items-center gap-4 mb-6">
+                            <div className="w-12 h-12 rounded-full bg-rose-500/20 flex items-center justify-center border border-rose-500/30 flex-shrink-0">
+                                <AlertTriangle className="w-6 h-6 text-rose-400" />
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-bold text-white mb-1">Encerrar Atendimento</h3>
+                                <p className="text-rose-400 font-mono text-sm font-bold tracking-widest">{currentCitizen.code}</p>
+                            </div>
+                        </div>
+                        
+                        <p className="text-slate-300 mb-6 font-medium text-sm leading-relaxed">
+                            O cidadão <strong className="text-white">{currentCitizen.name}</strong> não compareceu. Deseja encerrar este atendimento por falta de comparecimento?
+                        </p>
+
+                        <div className="bg-slate-900/80 rounded-2xl p-4 mb-6 border border-slate-700">
+                            <p className="text-xs text-slate-400 uppercase tracking-widest mb-2 font-bold flex justify-between">
+                                <span>Tempo Aguardado</span>
+                                <span className={`font-mono ${citizenWaitSeconds >= 300 ? 'text-rose-400' : 'text-amber-400'}`}>
+                                    {Math.floor(citizenWaitSeconds / 60).toString().padStart(2, '0')}:{(citizenWaitSeconds % 60).toString().padStart(2, '0')}
+                                </span>
+                            </p>
+                            
+                            <div className="flex gap-2">
+                                <div className="w-1.5 rounded-full bg-indigo-500/50"></div>
+                                <p className="text-xs text-slate-400 flex-1 leading-snug">
+                                    Recomendamos aguardar pelo menos <strong className="text-indigo-300">5 minutos</strong> antes de confirmar o encerramento.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setShowNoShowModal(false)}
+                                disabled={noShowLoading}
+                                className="flex-1 px-4 py-3 bg-slate-700 hover:bg-slate-600 rounded-xl text-white font-bold transition-colors disabled:opacity-50"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleNoShowConfirm}
+                                disabled={noShowLoading}
+                                className="flex-1 px-4 py-3 bg-rose-600 hover:bg-rose-500 rounded-xl text-white font-bold tracking-wide transition-colors flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg shadow-rose-900/20"
+                            >
+                                {noShowLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Confirmar'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );

@@ -64,5 +64,6 @@ model Visit {
   userId                String?
   user                  User?    @relation(fields: [userId], references: [id])
   calledToWaitingRoomAt DateTime? 
+  calledAt              DateTime? 
   timestamp             DateTime @default(now())
 }

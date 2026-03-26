@@ -172,7 +172,8 @@ app.get('/api/queue/display', async (req, res) => {
             sectorName: v.sector?.name ?? 'Geral',
             citizenName: v.citizen?.name ?? 'Cidadão',
             status: v.ticketStatus,
-            timestamp: v.timestamp
+            timestamp: v.timestamp,
+            calledAt: v.calledAt
         }));
 
         res.json({ tickets, avgWaitMinutes });
@@ -527,6 +528,33 @@ app.patch('/api/users/:id/password', authenticateToken, requireAdmin, async (req
 
 // --- CALL NEXT & CHECKOUT ---
 
+app.patch('/api/visits/:code/no-show', authenticateToken, async (req, res) => {
+    try {
+        const code = req.params.code as string;
+
+        const visit = await prisma.visit.findUnique({
+            where: { code },
+            include: { sector: true }
+        });
+
+        if (!visit) return res.status(404).json({ error: `Ticket [${code}] não encontrado no banco de dados.` });
+        if (visit.ticketStatus === 'FINISHED') return res.status(400).json({ error: `Ticket [${code}] já foi finalizado anteriormente.` });
+        if (visit.ticketStatus === 'EXPIRED') return res.status(400).json({ error: `Ticket [${code}] expirou por ser de um dia anterior.` });
+
+        // Mark as finished but ideally we could have a specific enum. Using FINISHED for now to remove from queue
+        // A future improvement could be logging a "NO_SHOW" specifically in another field or description.
+        const updated = await prisma.visit.update({
+            where: { id: visit.id },
+            data: { ticketStatus: 'FINISHED' }
+        });
+
+        res.json(updated);
+    } catch (error) {
+        console.error('Error no-show:', error);
+        res.status(500).json({ error: 'Failed to record no-show' });
+    }
+});
+
 app.post('/api/sectors/:id/call-next', authenticateToken, async (req, res) => {
     try {
         const sectorId = req.params.id as string;
@@ -578,7 +606,10 @@ app.post('/api/sectors/:id/call-next', authenticateToken, async (req, res) => {
         // Update visit status to IN_SERVICE
         const updatedVisit = await prisma.visit.update({
             where: { id: nextVisit.id },
-            data: { ticketStatus: 'IN_SERVICE' },
+            data: { 
+                ticketStatus: 'IN_SERVICE',
+                calledAt: new Date()
+            },
             include: { citizen: true, sector: true }
         });
 

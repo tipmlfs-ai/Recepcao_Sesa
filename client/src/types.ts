@@ -21,6 +21,7 @@ export interface Visit {
     sectorId: string;
     timestamp: string;
     calledToWaitingRoomAt?: string | null;
+    calledAt?: string | null;
     citizen: { cpf: string; name: string; phone?: string | null };
     sector: { id: string; name: string; soundUrl?: string };
 }
@@ -33,6 +34,7 @@ export interface Ticket {
     sectorId: string;
     timestamp: string;
     calledToWaitingRoomAt?: string | null;
+    calledAt?: string | null;
     citizen: { cpf: string; name: string; phone?: string | null };
     sector: { id: string; name: string; soundUrl?: string };
 }
