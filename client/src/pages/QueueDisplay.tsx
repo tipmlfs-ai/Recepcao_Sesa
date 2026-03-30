@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { API_URL } from '../config/apiConfig';
 import { supabase } from '../config/supabaseConfig';
@@ -128,6 +128,35 @@ const QueueDisplay: React.FC = () => {
       setData({ ...json, tickets: filteredTickets });
     } catch (_) { }
   }, []);
+
+  // ── Database Subscription & Polling ─────────────────────────────────────────
+  useEffect(() => {
+    fetchData();
+
+    // 1. Setup Supabase Realtime
+    const channel = supabase
+      .channel('public:Visit')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'Visit' }, () => {
+        fetchData();
+      })
+      .subscribe();
+      
+    channelRef.current = channel;
+
+    // 2. Setup Polling as fallback (every 3s)
+    pollRef.current = setInterval(() => {
+      fetchData();
+    }, 3000);
+
+    return () => {
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+      }
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+      }
+    };
+  }, [fetchData]);
 
   // ── Process Call Queue (Staggered Delay) ──────────────────────────────────
   useEffect(() => {
