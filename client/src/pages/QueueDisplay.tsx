@@ -10,9 +10,9 @@ interface Ticket {
   id: string;
   code: string;
   sectorName: string;
-  sectorCooldown: number; // seconds — configured by TI per sector
+  sectorCooldown: number;
   citizenName: string;
-  status: 'IN_SERVICE' | 'WAITING' | 'IN_WAITING_ROOM';
+  status: 'IN_SERVICE' | 'WAITING' | 'IN_WAITING_ROOM' | 'NO_SHOW';
   timestamp: string;
   calledAt?: string | null;
 }
@@ -36,6 +36,11 @@ const COLORS = {
 
 // ── Helper to determine ticket visual status ────────────────────────────────
 const getTicketStatusInfo = (ticket: Ticket, indexInList: number, nowMs: number) => {
+  // Already marked as no-show by the attendant — always orange
+  if (ticket.status === 'NO_SHOW') {
+    return { label: 'Não compareceu', color: '#F97316', bg: 'rgba(249, 115, 22, 0.1)', isExpired: true };
+  }
+
   if (ticket.status === 'IN_SERVICE' || ticket.status === 'IN_WAITING_ROOM') {
     if (ticket.calledAt) {
       const cooldownSeconds = ticket.sectorCooldown ?? 120;
@@ -95,7 +100,7 @@ const QueueDisplay: React.FC = () => {
       if (!res.ok) return;
       const json: DisplayData = await res.json();
 
-      const filteredTickets = json.tickets.filter(t => t.status === 'IN_SERVICE' || t.status === 'IN_WAITING_ROOM' || t.status === 'WAITING');
+      const filteredTickets = json.tickets.filter(t => t.status === 'IN_SERVICE' || t.status === 'IN_WAITING_ROOM' || t.status === 'WAITING' || t.status === 'NO_SHOW');
       const inService = filteredTickets.filter(t => t.status === 'IN_SERVICE' || t.status === 'IN_WAITING_ROOM');
 
       // Detect new calls

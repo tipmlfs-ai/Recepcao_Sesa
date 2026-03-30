@@ -132,11 +132,13 @@ const CallsTab: React.FC = () => {
                                 <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter ${
                                     call.ticketStatus === 'IN_SERVICE' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 
                                     call.ticketStatus === 'IN_WAITING_ROOM' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
+                                    call.ticketStatus === 'NO_SHOW' ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20' :
                                     'bg-slate-500/10 text-slate-400 border border-slate-500/20'
                                 }`}>
                                     {call.ticketStatus === 'IN_SERVICE' ? 'Em Atendimento' : 
                                      call.ticketStatus === 'IN_WAITING_ROOM' ? 'Na Sala de Espera' :
                                      call.ticketStatus === 'FINISHED' ? 'Finalizado' :
+                                     call.ticketStatus === 'NO_SHOW' ? 'Não Compareceu' :
                                      'Aguardando'}
                                 </div>
                             </div>

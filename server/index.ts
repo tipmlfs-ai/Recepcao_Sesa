@@ -41,7 +41,7 @@ app.use(async (req, res, next) => {
             // Check if there are ANY waiting or in_service tickets from BEFORE today
             const oldTicketsExist = await prisma.visit.findFirst({
                 where: {
-                    ticketStatus: { in: ['WAITING', 'IN_SERVICE'] },
+                    ticketStatus: { in: ['WAITING', 'IN_SERVICE', 'NO_SHOW'] },
                     timestamp: { lt: startOfToday }
                 }
             });
@@ -52,7 +52,7 @@ app.use(async (req, res, next) => {
                 // 1. Expire old pending tickets
                 await prisma.visit.updateMany({
                     where: {
-                        ticketStatus: { in: ['WAITING', 'IN_SERVICE'] },
+                        ticketStatus: { in: ['WAITING', 'IN_SERVICE', 'NO_SHOW'] },
                         timestamp: { lt: startOfToday }
                     },
                     data: { ticketStatus: 'EXPIRED' }
@@ -134,10 +134,10 @@ app.get('/api/queue/display', async (req, res) => {
         const startOfToday = new Date();
         startOfToday.setHours(0, 0, 0, 0);
 
-        // Fetch today's active tickets (IN_SERVICE, WAITING, and IN_WAITING_ROOM), ordered by timestamp asc
+        // Fetch today's active tickets (IN_SERVICE, WAITING, IN_WAITING_ROOM, and NO_SHOW), ordered by timestamp asc
         const activeVisits = await prisma.visit.findMany({
             where: {
-                ticketStatus: { in: ['IN_SERVICE', 'WAITING', 'IN_WAITING_ROOM'] },
+                ticketStatus: { in: ['IN_SERVICE', 'WAITING', 'IN_WAITING_ROOM', 'NO_SHOW'] },
                 timestamp: { gte: startOfToday }
             },
             orderBy: { timestamp: 'asc' },
@@ -542,11 +542,10 @@ app.patch('/api/visits/:code/no-show', authenticateToken, async (req, res) => {
         if (visit.ticketStatus === 'FINISHED') return res.status(400).json({ error: `Ticket [${code}] já foi finalizado anteriormente.` });
         if (visit.ticketStatus === 'EXPIRED') return res.status(400).json({ error: `Ticket [${code}] expirou por ser de um dia anterior.` });
 
-        // Mark as finished but ideally we could have a specific enum. Using FINISHED for now to remove from queue
-        // A future improvement could be logging a "NO_SHOW" specifically in another field or description.
+        // Mark as NO_SHOW so the ticket stays visible on the display panel (orange)
         const updated = await prisma.visit.update({
             where: { id: visit.id },
-            data: { ticketStatus: 'FINISHED' }
+            data: { ticketStatus: 'NO_SHOW' }
         });
 
         res.json(updated);
