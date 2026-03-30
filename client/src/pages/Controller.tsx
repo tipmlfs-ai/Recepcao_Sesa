@@ -631,8 +631,8 @@ const Controller: React.FC = () => {
                     </button>
                 </div>
 
-                {/* Em Atendimento — full card only for sectors WITH waiting room */}
-                {currentCitizen && sector.hasWaitingRoom && (
+                {/* Em Atendimento — citizen info card (shown for all sectors) */}
+                {currentCitizen && (
                     <div className="w-full bg-gradient-to-br from-indigo-900/40 to-slate-800/80 border border-indigo-500/30 rounded-2xl p-6 shadow-[0_0_40px_rgba(79,70,229,0.1)] animate-in slide-in-from-bottom-4 fade-in duration-500 relative overflow-hidden mt-4">
                         <div className="flex justify-between items-start mb-2">
                             <p className="text-indigo-400 text-sm font-bold tracking-widest uppercase">Em Atendimento</p>
@@ -658,17 +658,6 @@ const Controller: React.FC = () => {
                             </button>
                         )}
                     </div>
-                )}
-
-                {/* Encerrar por Tempo — slim button only for sectors WITHOUT waiting room */}
-                {currentCitizen && !sector.hasWaitingRoom && cooldown === 0 && (
-                    <button
-                        onClick={() => setShowNoShowModal(true)}
-                        className="w-full mt-2 py-3 px-4 bg-rose-500/10 hover:bg-rose-500/20 border-2 border-rose-500/30 hover:border-rose-500/50 rounded-xl text-rose-400 font-bold transition-all flex items-center justify-center gap-2"
-                    >
-                        <AlertTriangle className="w-4 h-4" />
-                        <span>Encerrar por Tempo Esgotado</span>
-                    </button>
                 )}
             </main>
 
