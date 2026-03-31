@@ -247,17 +247,34 @@ const QueueDisplay: React.FC = () => {
   return (
     <div style={styles.page}>
       {/* ── HEADER ─────────────────────────────────────────────────────────── */}
-      <header style={styles.header}>
-        <div style={styles.headerLeft}>
-          <img src="/logo.png" alt="Logo" style={styles.logo} onError={e => { (e.target as HTMLImageElement).style.visibility = 'hidden'; }} />
-          <div style={styles.logoDivider} />
-          <span style={styles.headerTitle}>SESA-LAURO</span>
-        </div>
+        <header style={styles.header}>
+          <div style={styles.headerLeft}>
+            <img src="/logo.png" alt="Logo" style={styles.logo} onError={e => { (e.target as HTMLImageElement).style.visibility = 'hidden'; }} />
+            <div style={styles.logoDivider} />
+            <span style={styles.headerTitle}>SESA-LAURO</span>
+          </div>
 
-        <div style={styles.headerRight}>
-          <div style={styles.clock}>{clock}</div>
-        </div>
-      </header>
+          <div style={styles.headerCenter}>
+            <div style={styles.legendWrapper}>
+              <div style={styles.legendItemTop}>
+                <div style={{...styles.legendCircle, background: COLORS.inService, boxShadow: `0 0 10px ${COLORS.inService}`}} />
+                <span>AGUARDANDO</span>
+              </div>
+              <div style={styles.legendItemTop}>
+                <div style={{...styles.legendCircle, background: '#F97316', boxShadow: `0 0 10px #F97316`}} />
+                <span>EXPIRADO</span>
+              </div>
+              <div style={styles.legendItemTop}>
+                <div style={{...styles.legendCircle, background: '#A855F7', boxShadow: `0 0 10px #A855F7`}} />
+                <span>PREFERENCIAL</span>
+              </div>
+            </div>
+          </div>
+
+          <div style={styles.headerRight}>
+            <div style={styles.clock}>{clock}</div>
+          </div>
+        </header>
 
       {/* ── HERO TICKET ────────────────────────────────────────────────────── */}
       <main style={styles.main}>
@@ -449,6 +466,34 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     letterSpacing: '2px',
     color: '#94A3B8',
+  },
+  headerCenter: {
+    flex: 1,
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  legendWrapper: {
+    display: 'flex',
+    gap: '32px',
+    background: 'rgba(255,255,255,0.03)',
+    padding: '8px 24px',
+    borderRadius: '100px',
+    border: `1px solid ${COLORS.border}`,
+  },
+  legendItemTop: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    fontSize: '12px',
+    fontWeight: 700,
+    letterSpacing: '1px',
+    color: '#94A3B8',
+  },
+  legendCircle: {
+    width: '12px',
+    height: '12px',
+    borderRadius: '50%',
   },
   headerRight: {
     textAlign: 'right',
