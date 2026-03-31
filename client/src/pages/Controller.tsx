@@ -2,7 +2,10 @@ import React, { useMemo, useEffect, useRef, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom';
 import { useRealTimeStatus } from '../useRealTimeStatus';
 import { useAuth } from '../contexts/AuthContext';
-import { LogOut, CheckCircle2, AlertTriangle, ShieldAlert, Users, PhoneCall, Hash, CheckCheck, BarChart3, Loader2 } from 'lucide-react';
+import { 
+    PhoneCall, Users, Loader2, ListOrdered, User, AlertTriangle, 
+    LogOut, BarChart3, Clock, LayoutDashboard, CheckCircle2, ShieldAlert, CheckCheck, Hash, Accessibility 
+} from 'lucide-react';
 import { API_URL } from '../config/apiConfig';
 import { toast } from 'sonner';
 import { SectorDashboardModal } from '../components/SectorDashboardModal';
@@ -15,6 +18,7 @@ const Controller: React.FC = () => {
     // Checkout state
     const [checkoutCode, setCheckoutCode] = useState('');
     const [checkoutLoading, setCheckoutLoading] = useState(false);
+    const [checkoutIsPriority, setCheckoutIsPriority] = useState(false);
     const [callingNext, setCallingNext] = useState(false);
     const [cooldown, setCooldown] = useState(0);
     const [currentCitizen, setCurrentCitizen] = useState<{ name: string, calledAt?: string, code?: string } | null>(null);
@@ -321,7 +325,8 @@ const Controller: React.FC = () => {
         setCheckoutLoading(true);
         try {
             const token = localStorage.getItem('@RecepcaoSesa:token');
-            const fullCode = `${sectorPrefix}${checkoutCode.trim().padStart(3, '0')}`;
+            const prefix = checkoutIsPriority ? `P-${sectorPrefix}` : sectorPrefix;
+            const fullCode = `${prefix}${checkoutCode.trim().padStart(3, '0')}`;
 
             const res = await fetch(`${API_URL}/api/visits/${fullCode}/checkout`, {
                 method: 'PATCH',
@@ -448,18 +453,36 @@ const Controller: React.FC = () => {
 
                         <form onSubmit={handleCheckout} className="flex flex-col sm:flex-row gap-3 items-stretch">
                             <div className="flex-1 relative group">
-                                <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-2 pointer-events-none z-10">
-                                    <Hash className="w-4 h-4 text-slate-500 group-focus-within:text-emerald-400 transition-colors" />
-                                    <span className="text-slate-500 font-black text-xs border-r border-slate-700/50 pr-2 group-focus-within:text-emerald-500/50 group-focus-within:border-emerald-500/30 transition-all uppercase">{sectorPrefix}</span>
+                                <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-2 pointer-events-none z-10 w-24">
+                                    <div className="flex flex-col gap-1 items-center justify-center border-r border-slate-700/50 pr-2">
+                                        <Hash className="w-4 h-4 text-slate-500 group-focus-within:text-emerald-400 transition-colors" />
+                                        <span className="text-slate-500 font-black text-xs group-focus-within:text-emerald-500/50 transition-colors uppercase">
+                                            {checkoutIsPriority ? `P-${sectorPrefix}` : sectorPrefix}
+                                        </span>
+                                    </div>
                                 </div>
                                 <input
                                     type="text"
                                     value={checkoutCode}
                                     onChange={(e) => setCheckoutCode(e.target.value.toUpperCase())}
                                     placeholder="000"
-                                    className="w-full h-14 bg-slate-900/50 border-2 border-slate-700/50 rounded-2xl pl-20 pr-4 text-white placeholder-slate-700 focus:outline-none focus:border-emerald-500/50 focus:bg-slate-900 transition-all font-black text-xl tracking-[0.2em] shadow-inner"
+                                    className="w-full h-14 bg-slate-900/50 border-2 border-slate-700/50 rounded-2xl pl-28 pr-4 text-white placeholder-slate-700 focus:outline-none focus:border-emerald-500/50 focus:bg-slate-900 transition-all font-black text-xl tracking-[0.2em] shadow-inner"
                                     maxLength={4}
                                 />
+                                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center bg-slate-800 rounded-xl p-1 gap-1">
+                                    <button 
+                                        type="button" 
+                                        onClick={() => setCheckoutIsPriority(false)}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${!checkoutIsPriority ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-300'}`}
+                                        title="Normal"
+                                    >N</button>
+                                    <button 
+                                        type="button" 
+                                        onClick={() => setCheckoutIsPriority(true)}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all flex items-center gap-1 ${checkoutIsPriority ? 'bg-amber-500 text-white shadow-md' : 'text-slate-500 hover:text-slate-300'}`}
+                                        title="Preferencial"
+                                    >P <Accessibility className="w-3 h-3"/></button>
+                                </div>
                             </div>
                             <button
                                 type="submit"

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { type Sector } from '../types';
-import { Printer, UserPlus, AlertTriangle } from 'lucide-react';
+import { Printer, UserPlus, AlertTriangle, Accessibility, User } from 'lucide-react';
 import { API_URL } from '../config/apiConfig';
 import { toast } from 'sonner';
 
@@ -15,6 +15,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ sectors }) => {
     const [selectedSector, setSelectedSector] = useState('');
     const [loading, setLoading] = useState(false);
     const [searchingCpf, setSearchingCpf] = useState(false);
+    const [isPriority, setIsPriority] = useState(false);
 
     const formatCpf = (val: string) => {
         return val.replace(/\D/g, '')
@@ -69,7 +70,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ sectors }) => {
         }
     };
 
-    const printTicket = (data: { code: string, sectorName: string, citizenName: string, date: Date }) => {
+    const printTicket = (data: { code: string, sectorName: string, citizenName: string, date: Date, isPriority: boolean }) => {
         const printContent = `
             <!DOCTYPE html>
             <html>
@@ -99,8 +100,8 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ sectors }) => {
                    <h1>SECRETARIA MUNICIPAL DE SAÚDE</h1>
                    <p class="header-subtitle">PREFEITURA DE LAURO DE FREITAS</p>
                    
-                   <div class="divider"></div>
                    
+                   ${data.isPriority ? '<div style="font-size: 14px; font-weight: bold; padding: 4px; background: #000; color: #fff; margin: 4px 0;">PREFERENCIAL ♿</div>' : ''}
                    <div class="info">Setor: <strong>${data.sectorName}</strong></div>
                    <div class="citizen">${data.citizenName}</div>
                    <div class="code">${data.code}</div>
@@ -175,7 +176,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ sectors }) => {
             const res = await fetch(`${API_URL}/api/visits`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                body: JSON.stringify({ cpf, name, phone, sectorId: selectedSector })
+                body: JSON.stringify({ cpf, name, phone, sectorId: selectedSector, isPriority })
             });
 
             if (res.ok) {
@@ -186,7 +187,8 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ sectors }) => {
                     code: data.code,
                     sectorName: data.sector.name,
                     citizenName: data.citizen.name,
-                    date: new Date(data.timestamp)
+                    date: new Date(data.timestamp),
+                    isPriority: data.isPriority
                 });
 
                 toast.success(`Ticket ${data.code} gerado com sucesso!`);
@@ -195,6 +197,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ sectors }) => {
                 setName('');
                 setPhone('');
                 setSelectedSector('');
+                setIsPriority(false);
             } else {
                 const err = await res.json();
                 toast.error(err.error || 'Erro ao registrar atendimento');
@@ -220,6 +223,38 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ sectors }) => {
                 </h2>
 
                 <form onSubmit={handleSubmit} className="space-y-8 relative z-10">
+                    
+                    {/* TOGGLE PREFERENCIAL */}
+                    <div>
+                        <label className="block text-slate-400 text-sm font-bold tracking-wide uppercase mb-3 ml-1">Tipo de Atendimento</label>
+                        <div className="flex bg-slate-900/50 p-1.5 rounded-2xl border border-slate-700/80 shadow-inner">
+                            <button
+                                type="button"
+                                onClick={() => setIsPriority(false)}
+                                className={`flex-1 flex items-center justify-center gap-3 py-4 rounded-xl font-black tracking-wide transition-all duration-300 ${
+                                    !isPriority 
+                                    ? 'bg-indigo-600 text-white shadow-[0_4px_20px_-5px_rgba(79,70,229,0.5)]' 
+                                    : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/50'
+                                }`}
+                            >
+                                <User className="w-5 h-5" />
+                                NORMAL
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setIsPriority(true)}
+                                className={`flex-1 flex items-center justify-center gap-3 py-4 rounded-xl font-black tracking-wide transition-all duration-300 ${
+                                    isPriority 
+                                    ? 'bg-amber-500 text-white shadow-[0_4px_20px_-5px_rgba(245,158,11,0.5)]' 
+                                    : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/50'
+                                }`}
+                            >
+                                <Accessibility className="w-5 h-5" />
+                                PREFERENCIAL
+                            </button>
+                        </div>
+                    </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                         <div>
                             <label className="block text-slate-400 text-sm font-bold tracking-wide uppercase mb-3 ml-1">CPF do Cidadão</label>

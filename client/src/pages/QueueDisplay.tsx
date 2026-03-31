@@ -243,6 +243,9 @@ const QueueDisplay: React.FC = () => {
 
   const heroInfo = heroTicket ? getTicketStatusInfo(heroTicket, 0, nowMs) : null;
   const isHeroExpired = heroInfo?.isExpired;
+  
+  // Custom styling overlays for Priority
+  const heroPriorityOverlay = heroTicket?.isPriority ? { borderColor: '#A855F7', background: 'rgba(168, 85, 247, 0.08)' } : {};
 
   return (
     <div style={styles.page}>
@@ -288,10 +291,24 @@ const QueueDisplay: React.FC = () => {
                 exit={{ opacity: 0, scale: 0.8 }}
                 transition={{ type: 'spring', bounce: 0.35, duration: 0.8 }}
                 key={heroTicket.id} 
-                style={{ ...styles.heroCard, ...(heroGlow ? styles.heroCardGlow : {}), ...(isHeroExpired ? { borderColor: 'rgba(249, 115, 22, 0.4)', background: 'rgba(249, 115, 22, 0.08)' } : {}) }}
+                style={{ 
+                  ...styles.heroCard, 
+                  ...(heroGlow ? styles.heroCardGlow : {}), 
+                  ...(isHeroExpired ? { borderColor: 'rgba(249, 115, 22, 0.4)', background: 'rgba(249, 115, 22, 0.08)' } : {}),
+                  ...(!isHeroExpired && heroPriorityOverlay) 
+                }}
               >
-                <p style={{...styles.heroSub, color: isHeroExpired ? '#F97316' : '#64748B'}}>{isHeroExpired ? 'NÃO COMPARECEU' : 'AGUARDANDO'}</p>
-                <h1 style={{...styles.heroCode, color: isHeroExpired ? '#FB923C' : COLORS.white}}>{heroTicket.code}</h1>
+                {heroTicket.isPriority && (
+                   <span style={{
+                     position: 'absolute', top: 24, padding: '6px 16px', right: 24,
+                     background: '#A855F7', color: '#fff', fontSize: '18px', fontWeight: 900, 
+                     borderRadius: '8px', letterSpacing: '2px', boxShadow: '0 0 20px rgba(168, 85, 247, 0.5)'
+                   }}>
+                     PREFERENCIAL ♿
+                   </span>
+                )}
+                <p style={{...styles.heroSub, color: isHeroExpired ? '#F97316' : (heroTicket.isPriority ? '#D8B4FE' : '#64748B')}}>{isHeroExpired ? 'NÃO COMPARECEU' : 'AGUARDANDO'}</p>
+                <h1 style={{...styles.heroCode, color: isHeroExpired ? '#FB923C' : (heroTicket.isPriority ? '#F3E8FF' : COLORS.white)}}>{heroTicket.code}</h1>
                 <div style={styles.heroStatus}>
                   <div style={{...styles.heroDot, background: isHeroExpired ? '#F97316' : COLORS.inService, boxShadow: isHeroExpired ? `0 0 15px #F97316` : `0 0 15px ${COLORS.inService}`}} />
                   <span style={{color: isHeroExpired ? '#FB923C' : '#CBD5E1'}}>{heroTicket.sectorName}</span>
@@ -338,12 +355,22 @@ const QueueDisplay: React.FC = () => {
                       key={t.id}
                       style={{
                         ...styles.gridItem,
-                        background: info.isExpired ? 'rgba(249, 115, 22, 0.12)' : 'rgba(255,255,255,0.03)',
-                        borderColor: info.isExpired ? 'rgba(249, 115, 22, 0.3)' : 'rgba(255,255,255,0.08)',
+                        background: info.isExpired ? 'rgba(249, 115, 22, 0.12)' : (t.isPriority ? 'rgba(168, 85, 247, 0.08)' : 'rgba(255,255,255,0.03)'),
+                        borderColor: info.isExpired ? 'rgba(249, 115, 22, 0.3)' : (t.isPriority ? 'rgba(168, 85, 247, 0.3)' : 'rgba(255,255,255,0.08)'),
                         flexDirection: 'column',
-                        gap: '4px'
+                        justifyContent: 'center',
+                        gap: '2px',
+                        position: 'relative'
                       }}
                     >
+                      {t.isPriority && (
+                          <span style={{ 
+                            position: 'absolute', top: 4, right: 8, fontSize: '9px', fontWeight: 900, 
+                            color: '#e9d5ff', background: '#9333ea', padding: '1px 4px', borderRadius: '4px' 
+                          }}>
+                            ★
+                          </span>
+                      )}
                       <span style={{ ...styles.gridCode, color: info.color }}>{t.code}</span>
                       <span style={{ ...styles.gridSector, color: info.color + '80' }}>
                         {t.sectorName}

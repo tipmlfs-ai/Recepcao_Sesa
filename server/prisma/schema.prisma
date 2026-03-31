@@ -58,6 +58,7 @@ model Visit {
   id                    String   @id @default(uuid())
   code                  String?  @unique  // Código único do ticket ex: A-045
   ticketStatus          String?  @default("WAITING") // WAITING | IN_WAITING_ROOM | IN_SERVICE | FINISHED
+  isPriority            Boolean  @default(false)
   citizenId             String
   citizen               Citizen  @relation(fields: [citizenId], references: [cpf])
   sectorId              String

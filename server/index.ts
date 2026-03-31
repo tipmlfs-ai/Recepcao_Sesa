@@ -173,6 +173,7 @@ app.get('/api/queue/display', async (req, res) => {
             sectorCooldown: v.sector?.callCooldown ?? 120,
             citizenName: v.citizen?.name ?? 'Cidadão',
             status: v.ticketStatus,
+            isPriority: v.isPriority,
             timestamp: v.timestamp,
             calledAt: v.calledAt
         }));
@@ -268,7 +269,7 @@ app.get('/api/citizens/:cpf', authenticateToken, async (req, res) => {
 
 app.post('/api/visits', authenticateToken, async (req, res) => {
     try {
-        const { cpf, name, phone, sectorId } = req.body;
+        const { cpf, name, phone, sectorId, isPriority } = req.body;
         const userId = (req as any).user.id;
 
         // Verify sector is not AWAY
@@ -300,7 +301,8 @@ app.post('/api/visits', authenticateToken, async (req, res) => {
             .toUpperCase() || 'GER'; // fallback to GER if no letters
 
         const ticketNum = totalCount + 1;
-        const code = `${prefix}-${String(ticketNum).padStart(3, '0')}`;
+        const baseCode = `${prefix}-${String(ticketNum).padStart(3, '0')}`;
+        const code = isPriority ? `P-${baseCode}` : baseCode;
 
         // Create visit
         const visit = await prisma.visit.create({
@@ -309,6 +311,7 @@ app.post('/api/visits', authenticateToken, async (req, res) => {
                 citizenId: citizen.cpf,
                 sectorId,
                 userId,
+                isPriority: isPriority || false,
                 ticketStatus: 'WAITING'
             },
             include: { citizen: true, sector: true }

@@ -17,6 +17,7 @@ export interface Visit {
     id: string;
     code?: string | null;
     ticketStatus?: 'WAITING' | 'IN_WAITING_ROOM' | 'IN_SERVICE' | 'FINISHED' | null;
+    isPriority?: boolean;
     citizenId: string;
     sectorId: string;
     timestamp: string;
@@ -30,6 +31,7 @@ export interface Ticket {
     id: string;
     code?: string | null;
     ticketStatus?: 'WAITING' | 'IN_WAITING_ROOM' | 'IN_SERVICE' | 'FINISHED' | null;
+    isPriority?: boolean;
     citizenId: string;
     sectorId: string;
     timestamp: string;

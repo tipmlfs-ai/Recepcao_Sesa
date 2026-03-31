@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Users, CheckSquare, Square, PhoneCall, Hash, Loader2 } from 'lucide-react';
+import { X, Users, CheckSquare, Square, PhoneCall, Hash, Loader2, Accessibility } from 'lucide-react';
 import { API_URL } from '../config/apiConfig';
 import { toast } from 'sonner';
 
@@ -19,6 +19,7 @@ interface WaitingVisit {
         name: string;
         cpf: string;
     };
+    isPriority?: boolean;
 }
 
 export const ArrivalOrderModal: React.FC<ArrivalOrderModalProps> = ({ 
@@ -169,9 +170,16 @@ export const ArrivalOrderModal: React.FC<ArrivalOrderModalProps> = ({
                                             {isSelected ? <CheckSquare className="w-6 h-6" /> : <Square className="w-6 h-6" />}
                                         </div>
                                         <div className="flex-1 text-left">
-                                            <p className={`font-bold text-lg transition-colors ${isSelected ? 'text-white' : 'text-slate-200'}`}>
-                                                {visit.citizen.name}
-                                            </p>
+                                            <div className="flex items-center gap-2">
+                                                <p className={`font-bold text-lg transition-colors ${isSelected ? 'text-white' : 'text-slate-200'}`}>
+                                                    {visit.citizen.name}
+                                                </p>
+                                                {visit.isPriority && (
+                                                    <span className="flex items-center gap-1 bg-amber-500/20 text-amber-500 border border-amber-500/30 px-2 py-0.5 rounded-md text-[10px] font-black tracking-widest uppercase">
+                                                        <Accessibility className="w-3 h-3" /> PREFERENCIAL
+                                                    </span>
+                                                )}
+                                            </div>
                                             <div className="flex items-center gap-3 mt-1">
                                                 <span className="flex items-center gap-1.5 text-xs font-mono text-slate-400">
                                                     <Hash className="w-3 h-3" /> {visit.citizen.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}
