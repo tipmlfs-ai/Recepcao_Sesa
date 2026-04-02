@@ -386,7 +386,7 @@ export const SectorDashboardModal: React.FC<SectorDashboardModalProps> = ({ isOp
                     <div className="flex-1 min-h-[300px] border border-slate-700/50 bg-slate-800/30 rounded-xl overflow-hidden flex flex-col">
                         <div className="grid grid-cols-12 gap-x-4 px-6 py-3 border-b border-slate-700/50 bg-slate-800/80 text-xs font-bold text-slate-400 uppercase tracking-wider">
                             <div className="col-span-2">Entrada</div>
-                            <div className="col-span-2">Saída</div>
+                            <div className="col-span-2">Atendido em</div>
                             <div className="col-span-1">Status</div>
                             <div className="col-span-3">Cidadão</div>
                             <div className="col-span-2">Cpf</div>
@@ -418,7 +418,7 @@ export const SectorDashboardModal: React.FC<SectorDashboardModalProps> = ({ isOp
                                                         <div className="text-xs text-slate-500">{new Date(visit.finishedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
                                                     </>
                                                 ) : (
-                                                    <span className="text-slate-600 italic text-xs">Em aberto</span>
+                                                    <span className="text-slate-600 italic text-xs">-</span>
                                                 )}
                                             </div>
                                             <div className="col-span-1">

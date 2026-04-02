@@ -141,7 +141,7 @@ router.get('/xlsx', async (req, res) => {
         const rawSheet = workbook.addWorksheet('Raw Data', { views: [{ state: 'frozen', xSplit: 0, ySplit: 1 }] });
         rawSheet.columns = [
             { header: 'Entrada', key: 'timestamp', width: 20 },
-            { header: 'Saída/Baixa', key: 'finishedAt', width: 20 },
+            { header: 'Atendido em', key: 'finishedAt', width: 20 },
             { header: 'Ticket', key: 'code', width: 15 },
             { header: 'Status', key: 'status', width: 15 },
             { header: 'Cidadão', key: 'citizenName', width: 30 },
@@ -219,7 +219,7 @@ router.get('/pdf', async (req, res) => {
             const adjustTZ = (d: any) => d ? new Date(new Date(d).getTime() - 3 * 60 * 60 * 1000) : null;
             
             const displayEntry = v.timestamp ? format(adjustTZ(v.timestamp) as Date, 'dd/MM/yyyy HH:mm') : '-';
-            const displayExit = v.finishedAt ? format(adjustTZ(v.finishedAt) as Date, 'dd/MM/yyyy HH:mm') : 'Em Aberto';
+            const displayExit = v.finishedAt ? format(adjustTZ(v.finishedAt) as Date, 'dd/MM/yyyy HH:mm') : '-';
             
             tableRowsHtml += `
                 <tr>
@@ -271,7 +271,7 @@ router.get('/pdf', async (req, res) => {
                 <thead>
                     <tr>
                         <th>Entrada</th>
-                        <th>Saída</th>
+                        <th>Atendido em</th>
                         <th>Ticket</th>
                         <th>Status</th>
                         <th>Cidadão</th>
