@@ -10,6 +10,17 @@ const app = express();
 const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3001;
 
+// --- DATABASE URL SAFETY CHECK ---
+const dbUrl = process.env.DATABASE_URL || '';
+if (dbUrl.includes(':6543') && !dbUrl.includes('pgbouncer=true')) {
+    console.error(' [CRÍTICO] DATABASE_URL está usando a porta do pooler (6543) mas está faltando "?pgbouncer=true".');
+    console.warn(' Isso causará erros de "prepared statement already exists" (42P05) em produção.');
+}
+
+// Log connection string (masked) to help verify Vercel environment
+const maskedUrl = dbUrl.replace(/:([^@]+)@/, ':****@');
+console.log(`[Database] Conectando ao banco de dados: ${maskedUrl}`);
+
 // Helper to reset date to start of day
 function todayReset(d: Date) {
     d.setHours(0, 0, 0, 0);
@@ -20,19 +31,13 @@ app.use(cors());
 app.use(express.json());
 
 // Daily Queue Reset Middleware - Serverless Compatible
-let hasCheckedInitialDate = false;
-let lastResetDate = new Date().getDate();
-
 app.use(async (req, res, next) => {
     const today = new Date();
-    const currentDay = today.getDate();
-
-    // We need to check the DB if:
-    // 1. The day has changed while server is running.
-    // 2. Or this is a cold start (we haven't checked yet).
-    if (currentDay !== lastResetDate || !hasCheckedInitialDate) {
-        lastResetDate = currentDay;
-        hasCheckedInitialDate = true;
+    const currentDayStr = today.toISOString().split('T')[0]; // YYYY-MM-DD
+    
+    // We use a string comparison for the date to avoid time-zone issues in serverless
+    if (globalThis.lastResetDateStr !== currentDayStr) {
+        globalThis.lastResetDateStr = currentDayStr;
 
         try {
             const startOfToday = new Date(today);
@@ -41,18 +46,18 @@ app.use(async (req, res, next) => {
             // Check if there are ANY waiting or in_service tickets from BEFORE today
             const oldTicketsExist = await prisma.visit.findFirst({
                 where: {
-                    ticketStatus: { in: ['WAITING', 'IN_SERVICE', 'NO_SHOW'] },
+                    ticketStatus: { in: ['WAITING', 'IN_SERVICE', 'NO_SHOW', 'IN_WAITING_ROOM'] },
                     timestamp: { lt: startOfToday }
                 }
             });
 
             if (oldTicketsExist) {
-                console.log('[Daily Reset] Pendências de dias anteriores encontradas. Executando limpeza...');
+                console.log(`[Daily Reset] [${currentDayStr}] Pendências de dias anteriores encontradas. Executando limpeza...`);
 
                 // 1. Expire old pending tickets
                 await prisma.visit.updateMany({
                     where: {
-                        ticketStatus: { in: ['WAITING', 'IN_SERVICE', 'NO_SHOW'] },
+                        ticketStatus: { in: ['WAITING', 'IN_SERVICE', 'NO_SHOW', 'IN_WAITING_ROOM'] },
                         timestamp: { lt: startOfToday }
                     },
                     data: { ticketStatus: 'EXPIRED' }
@@ -76,15 +81,22 @@ app.use(async (req, res, next) => {
                 }
 
                 console.log('[Daily Reset] Filas zeradas e recalibradas perfeitamente para o dia de hoje.');
+            } else {
+                 console.log(`[Daily Reset] [${currentDayStr}] Fila já está limpa para hoje.`);
             }
         } catch (error) {
             console.error('[Daily Reset] Erro:', error);
-            // On failure, allow re-check next time to ensure consistency
-            hasCheckedInitialDate = false;
+            // On failure, reset the global check so it tries again on next request
+            globalThis.lastResetDateStr = '';
         }
     }
     next();
 });
+
+// Polyfill for globalThis in older node versions if needed, but modern node (Vercel) supports it.
+declare global {
+    var lastResetDateStr: string;
+}
 
 // API Routes
 app.get('/', (req, res) => {
@@ -374,13 +386,14 @@ app.get('/api/visits', authenticateToken, async (req, res) => {
                 const customStart = req.query.startDate as string;
                 const customEnd = req.query.endDate as string;
                 if (customStart && customEnd) {
-                    // Using T00:00:00 to ensure date is parsed in local time/midnight correctly
-                    startDate = new Date(customStart + 'T00:00:00');
-                    endDate = new Date(customEnd + 'T23:59:59.999');
+                    // Ensures the dates are parsed as local midnight (UTC-3 for user)
+                    // We also ensure end date includes the whole day
+                    startDate = new Date(customStart + 'T00:00:00-03:00');
+                    endDate = new Date(customEnd + 'T23:59:59.999-03:00');
                 } else {
-                    // Fallback to today if custom range is missing params
+                    // Fallback to today UTC-3
                     startDate = new Date();
-                    startDate.setHours(0, 0, 0, 0);
+                    startDate.setHours(0, 0, 0, 0); 
                     endDate = new Date();
                     endDate.setHours(23, 59, 59, 999);
                 }
@@ -548,7 +561,10 @@ app.patch('/api/visits/:code/no-show', authenticateToken, async (req, res) => {
         // Mark as NO_SHOW so the ticket stays visible on the display panel (orange)
         const updated = await prisma.visit.update({
             where: { id: visit.id },
-            data: { ticketStatus: 'NO_SHOW' }
+            data: { 
+                ticketStatus: 'NO_SHOW',
+                finishedAt: new Date()
+            }
         });
 
         res.json(updated);
@@ -645,7 +661,10 @@ app.patch('/api/visits/:code/checkout', authenticateToken, async (req, res) => {
         // Mark as finished
         const updated = await prisma.visit.update({
             where: { id: visit.id },
-            data: { ticketStatus: 'FINISHED' }
+            data: { 
+                ticketStatus: 'FINISHED',
+                finishedAt: new Date()
+            }
         });
 
         res.json(updated);

@@ -58,8 +58,8 @@ async function getFilteredVisits(req: Request) {
             const customStart = req.query.startDate as string;
             const customEnd = req.query.endDate as string;
             if (customStart && customEnd) {
-                startDate = new Date(customStart + 'T00:00:00');
-                endDate = new Date(customEnd + 'T23:59:59.999');
+                startDate = new Date(customStart + 'T00:00:00-03:00');
+                endDate = new Date(customEnd + 'T23:59:59.999-03:00');
             } else {
                 startDate = new Date();
                 startDate.setHours(0, 0, 0, 0);
@@ -140,7 +140,8 @@ router.get('/xlsx', async (req, res) => {
         // Aba 2: Raw Data
         const rawSheet = workbook.addWorksheet('Raw Data', { views: [{ state: 'frozen', xSplit: 0, ySplit: 1 }] });
         rawSheet.columns = [
-            { header: 'Data/Hora', key: 'timestamp', width: 20 },
+            { header: 'Entrada', key: 'timestamp', width: 20 },
+            { header: 'Saída/Baixa', key: 'finishedAt', width: 20 },
             { header: 'Ticket', key: 'code', width: 15 },
             { header: 'Status', key: 'status', width: 15 },
             { header: 'Cidadão', key: 'citizenName', width: 30 },
@@ -155,8 +156,15 @@ router.get('/xlsx', async (req, res) => {
         rawSheet.autoFilter = 'A1:G1';
 
         visits.forEach((v: any) => {
+            // Adjust to UTC-3 for display
+            const adjustDate = (d: Date | null) => {
+                if (!d) return null;
+                return new Date(new Date(d).getTime() - 3 * 60 * 60 * 1000);
+            };
+
             const row = rawSheet.addRow({
-                timestamp: v.timestamp,
+                timestamp: adjustDate(v.timestamp),
+                finishedAt: adjustDate(v.finishedAt),
                 code: v.code,
                 status: translateStatus(v.ticketStatus),
                 citizenName: v.citizen?.name,
@@ -164,8 +172,9 @@ router.get('/xlsx', async (req, res) => {
                 sectorName: v.sector?.name,
                 userEmail: v.user?.email || '-'
             });
-            // formatting timestamp column as native excel date
+            // formatting timestamp columns as native excel dates
             row.getCell('timestamp').numFmt = 'dd/mm/yyyy hh:mm';
+            row.getCell('finishedAt').numFmt = 'dd/mm/yyyy hh:mm';
         });
 
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -207,13 +216,15 @@ router.get('/pdf', async (req, res) => {
 
         let tableRowsHtml = '';
         visits.forEach((v: any) => {
-            const printDate = (v.timestamp instanceof Date && !isNaN(v.timestamp.valueOf()))
-                ? format(v.timestamp, 'dd/MM/yyyy HH:mm') 
-                : '-';
+            const adjustTZ = (d: any) => d ? new Date(new Date(d).getTime() - 3 * 60 * 60 * 1000) : null;
+            
+            const displayEntry = v.timestamp ? format(adjustTZ(v.timestamp) as Date, 'dd/MM/yyyy HH:mm') : '-';
+            const displayExit = v.finishedAt ? format(adjustTZ(v.finishedAt) as Date, 'dd/MM/yyyy HH:mm') : 'Em Aberto';
             
             tableRowsHtml += `
                 <tr>
-                    <td>${printDate}</td>
+                    <td>${displayEntry}</td>
+                    <td>${displayExit}</td>
                     <td>${v.code || '-'}</td>
                     <td>${translateStatus(v.ticketStatus)}</td>
                     <td>${v.citizen?.name || 'Anônimo'}</td>
@@ -259,7 +270,8 @@ router.get('/pdf', async (req, res) => {
             <table>
                 <thead>
                     <tr>
-                        <th>Data/Hora</th>
+                        <th>Entrada</th>
+                        <th>Saída</th>
                         <th>Ticket</th>
                         <th>Status</th>
                         <th>Cidadão</th>

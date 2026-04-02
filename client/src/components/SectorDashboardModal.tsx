@@ -23,6 +23,7 @@ interface VisitData {
         email: string;
     };
     ticketStatus: string;
+    finishedAt?: string | null;
 }
 
 export const SectorDashboardModal: React.FC<SectorDashboardModalProps> = ({ isOpen, onClose, sectorId, sectorName }) => {
@@ -384,11 +385,12 @@ export const SectorDashboardModal: React.FC<SectorDashboardModalProps> = ({ isOp
                     {/* Data List */}
                     <div className="flex-1 min-h-[300px] border border-slate-700/50 bg-slate-800/30 rounded-xl overflow-hidden flex flex-col">
                         <div className="grid grid-cols-12 gap-x-4 px-6 py-3 border-b border-slate-700/50 bg-slate-800/80 text-xs font-bold text-slate-400 uppercase tracking-wider">
-                            <div className="col-span-2">Data/Hora</div>
-                            <div className="col-span-2">Status</div>
+                            <div className="col-span-2">Entrada</div>
+                            <div className="col-span-2">Saída</div>
+                            <div className="col-span-1">Status</div>
                             <div className="col-span-3">Cidadão</div>
                             <div className="col-span-2">Cpf</div>
-                            <div className="col-span-3">Contato</div>
+                            <div className="col-span-2">Contato</div>
                         </div>
 
                         <div className="flex-1 overflow-y-auto">
@@ -409,18 +411,28 @@ export const SectorDashboardModal: React.FC<SectorDashboardModalProps> = ({ isOp
                                                 <div className="font-medium">{new Date(visit.timestamp).toLocaleDateString('pt-BR')}</div>
                                                 <div className="text-xs text-slate-500">{new Date(visit.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
                                             </div>
-                                            <div className="col-span-2">
+                                            <div className="col-span-2 text-sm text-slate-300">
+                                                {visit.finishedAt ? (
+                                                    <>
+                                                        <div className="font-medium">{new Date(visit.finishedAt).toLocaleDateString('pt-BR')}</div>
+                                                        <div className="text-xs text-slate-500">{new Date(visit.finishedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
+                                                    </>
+                                                ) : (
+                                                    <span className="text-slate-600 italic text-xs">Em aberto</span>
+                                                )}
+                                            </div>
+                                            <div className="col-span-1">
                                                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-tighter ${
                                                     visit.ticketStatus === 'FINISHED' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 
                                                     visit.ticketStatus === 'IN_SERVICE' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' :
                                                     visit.ticketStatus === 'EXPIRED' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' :
                                                     'bg-slate-500/10 text-slate-400 border border-slate-500/20'
                                                 }`}>
-                                                    {visit.ticketStatus === 'FINISHED' ? 'Finalizado' :
-                                                     visit.ticketStatus === 'IN_SERVICE' ? 'Em Atendimento' :
-                                                     visit.ticketStatus === 'IN_WAITING_ROOM' ? 'Na Sala de Espera' :
-                                                     visit.ticketStatus === 'EXPIRED' ? 'Expirado' :
-                                                     'Aguardando'}
+                                                    {visit.ticketStatus === 'FINISHED' ? 'Fin.' :
+                                                     visit.ticketStatus === 'IN_SERVICE' ? 'Atend.' :
+                                                     visit.ticketStatus === 'IN_WAITING_ROOM' ? 'Sala' :
+                                                     visit.ticketStatus === 'EXPIRED' ? 'Exp.' :
+                                                     'Aguard.'}
                                                 </span>
                                             </div>
                                             <div className="col-span-3 text-sm font-medium text-white truncate pr-4">
@@ -430,11 +442,11 @@ export const SectorDashboardModal: React.FC<SectorDashboardModalProps> = ({ isOp
                                                 <Hash className="w-3.5 h-3.5 text-slate-500" />
                                                 {visit.citizen.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}
                                             </div>
-                                            <div className="col-span-3 flex items-center gap-2 text-sm text-slate-300">
+                                            <div className="col-span-2 flex items-center gap-2 text-sm text-slate-300">
                                                 {visit.citizen.phone ? (
                                                     <><Phone className="w-3.5 h-3.5 text-emerald-500" /><span>{visit.citizen.phone}</span></>
                                                 ) : (
-                                                    <span className="text-slate-600 italic">Não informado</span>
+                                                    <span className="text-slate-600 italic">N/I</span>
                                                 )}
                                             </div>
                                         </div>
