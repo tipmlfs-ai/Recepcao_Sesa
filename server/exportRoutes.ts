@@ -164,7 +164,7 @@ router.get('/xlsx', async (req, res) => {
 
             const row = rawSheet.addRow({
                 timestamp: adjustDate(v.timestamp),
-                finishedAt: adjustDate(v.finishedAt),
+                finishedAt: (v.finishedAt && v.ticketStatus !== 'NO_SHOW') ? adjustDate(v.finishedAt) : null,
                 code: v.code,
                 status: translateStatus(v.ticketStatus),
                 citizenName: v.citizen?.name,
@@ -219,7 +219,7 @@ router.get('/pdf', async (req, res) => {
             const adjustTZ = (d: any) => d ? new Date(new Date(d).getTime() - 3 * 60 * 60 * 1000) : null;
             
             const displayEntry = v.timestamp ? format(adjustTZ(v.timestamp) as Date, 'dd/MM/yyyy HH:mm') : '-';
-            const displayExit = v.finishedAt ? format(adjustTZ(v.finishedAt) as Date, 'dd/MM/yyyy HH:mm') : '-';
+            const displayExit = (v.finishedAt && v.ticketStatus !== 'NO_SHOW') ? format(adjustTZ(v.finishedAt) as Date, 'dd/MM/yyyy HH:mm') : '-';
             
             tableRowsHtml += `
                 <tr>

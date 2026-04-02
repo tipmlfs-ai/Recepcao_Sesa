@@ -412,7 +412,7 @@ export const SectorDashboardModal: React.FC<SectorDashboardModalProps> = ({ isOp
                                                 <div className="text-xs text-slate-500">{new Date(visit.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
                                             </div>
                                             <div className="col-span-2 text-sm text-slate-300">
-                                                {visit.finishedAt ? (
+                                                {visit.finishedAt && visit.ticketStatus !== 'NO_SHOW' ? (
                                                     <>
                                                         <div className="font-medium">{new Date(visit.finishedAt).toLocaleDateString('pt-BR')}</div>
                                                         <div className="text-xs text-slate-500">{new Date(visit.finishedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
