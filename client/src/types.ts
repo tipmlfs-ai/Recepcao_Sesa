@@ -17,6 +17,7 @@ export interface Sector {
     hasWaitingRoom?: boolean;
     waitingRoomCapacity?: number;
     isHeterogeneous?: boolean;
+    isVisibleOnPanel?: boolean;
     resources?: Resource[];
     updatedAt: string;
 }

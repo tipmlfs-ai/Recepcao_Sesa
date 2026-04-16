@@ -8,7 +8,7 @@ import {
 } from 'recharts';
 import { 
     Activity, ShieldCheck, Clock, FileWarning, ArrowLeft, BarChart3, TrendingUp,
-    Download, ChevronDown, FileText, FileSpreadsheet, Mail, X
+    Download, FileText, FileSpreadsheet, Mail, X
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -21,6 +21,8 @@ interface VisitData {
     citizenId: string;
     citizen: { cpf: string; name: string; phone: string | null };
     sector: { name: string };
+    calledAt?: string | null;
+    finishedAt?: string | null;
 }
 
 const DataAnalytics: React.FC = () => {
