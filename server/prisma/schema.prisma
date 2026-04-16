@@ -39,10 +39,25 @@ model Sector {
   callCooldown        Int      @default(120) // Tempo em segundos de espera mandatória entre cada chamada
   hasWaitingRoom      Boolean  @default(false)
   waitingRoomCapacity Int      @default(5)
+  isHeterogeneous     Boolean  @default(false)
+  isVisibleOnPanel    Boolean  @default(true)
+  resources           Resource[]
   user                User?
   visits              Visit[]
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
+}
+
+model Resource {
+  id        String   @id @default(uuid())
+  name      String
+  sectorId  String
+  sector    Sector   @relation(fields: [sectorId], references: [id], onDelete: Restrict)
+  visits    Visit[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([name, sectorId])
 }
 
 model Citizen {
@@ -63,6 +78,8 @@ model Visit {
   citizen               Citizen  @relation(fields: [citizenId], references: [cpf])
   sectorId              String
   sector                Sector   @relation(fields: [sectorId], references: [id])
+  resourceId            String?
+  resource              Resource? @relation(fields: [resourceId], references: [id])
   userId                String?
   user                  User?    @relation(fields: [userId], references: [id])
   calledToWaitingRoomAt DateTime? 

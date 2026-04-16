@@ -17,6 +17,7 @@ interface Ticket {
   timestamp: string;
   calledAt?: string | null;
   isPriority?: boolean;
+  resourceName?: string;
 }
 
 interface DisplayData {
@@ -315,7 +316,7 @@ const QueueDisplay: React.FC = () => {
                 <h1 style={{...styles.heroCode, color: isHeroExpired ? '#FB923C' : (heroTicket.isPriority ? '#F3E8FF' : COLORS.white)}}>{heroTicket.code}</h1>
                 <div style={styles.heroStatus}>
                   <div style={{...styles.heroDot, background: isHeroExpired ? '#F97316' : (heroTicket.isPriority ? '#A855F7' : COLORS.inService), boxShadow: isHeroExpired ? `0 0 15px #F97316` : (heroTicket.isPriority ? `0 0 15px #A855F7` : `0 0 15px ${COLORS.inService}`)}} />
-                  <span style={{color: isHeroExpired ? '#FB923C' : '#CBD5E1'}}>{heroTicket.sectorName}</span>
+                  <span style={{color: isHeroExpired ? '#FB923C' : '#CBD5E1'}}>{heroTicket.sectorName}{heroTicket.resourceName ? ` | ${heroTicket.resourceName}` : ''}</span>
                 </div>
                 
                 {/* Batch feedback */}
@@ -377,7 +378,7 @@ const QueueDisplay: React.FC = () => {
                       )}
                       <span style={{ ...styles.gridCode, color: info.color }}>{t.code}</span>
                       <span style={{ ...styles.gridSector, color: info.color + '80' }}>
-                        {t.sectorName}
+                        {t.sectorName}{t.resourceName ? ` | ${t.resourceName}` : ''}
                       </span>
                     </motion.div>
                   );

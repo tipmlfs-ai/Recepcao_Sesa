@@ -22,7 +22,10 @@ interface Visit {
 
 export const HistoryTab: React.FC = () => {
     const [filterType, setFilterType] = useState<'day' | 'week' | 'month'>('day');
-    const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+    const [selectedDate, setSelectedDate] = useState(() => {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    });
 
     // Search states
     const [searchCode, setSearchCode] = useState('');
@@ -42,7 +45,28 @@ export const HistoryTab: React.FC = () => {
             } else if (searchCpf.trim()) {
                 url += `cpf=${searchCpf.trim().replace(/\D/g, '')}`;
             } else {
-                url += `date=${selectedDate}&filterType=${filterType}`;
+                let calculatedStart, calculatedEnd;
+                const baseDate = new Date(selectedDate + "T12:00:00.000"); // Local noon to avoid boundary shifts
+
+                if (filterType === 'day') {
+                    calculatedStart = selectedDate;
+                    calculatedEnd = selectedDate;
+                } else if (filterType === 'week') {
+                    const dayOfWeek = baseDate.getDay();
+                    const startOfWeek = new Date(baseDate);
+                    startOfWeek.setDate(baseDate.getDate() - dayOfWeek);
+                    const endOfWeek = new Date(baseDate);
+                    endOfWeek.setDate(baseDate.getDate() + (6 - dayOfWeek));
+                    calculatedStart = `${startOfWeek.getFullYear()}-${String(startOfWeek.getMonth()+1).padStart(2,'0')}-${String(startOfWeek.getDate()).padStart(2,'0')}`;
+                    calculatedEnd = `${endOfWeek.getFullYear()}-${String(endOfWeek.getMonth()+1).padStart(2,'0')}-${String(endOfWeek.getDate()).padStart(2,'0')}`;
+                } else {
+                    const startOfMonth = new Date(baseDate.getFullYear(), baseDate.getMonth(), 1);
+                    const endOfMonth = new Date(baseDate.getFullYear(), baseDate.getMonth() + 1, 0);
+                    calculatedStart = `${startOfMonth.getFullYear()}-${String(startOfMonth.getMonth()+1).padStart(2,'0')}-${String(startOfMonth.getDate()).padStart(2,'0')}`;
+                    calculatedEnd = `${endOfMonth.getFullYear()}-${String(endOfMonth.getMonth()+1).padStart(2,'0')}-${String(endOfMonth.getDate()).padStart(2,'0')}`;
+                }
+
+                url += `filterType=custom&startDate=${calculatedStart}&endDate=${calculatedEnd}`;
             }
 
             const res = await fetch(url, {

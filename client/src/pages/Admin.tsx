@@ -4,6 +4,12 @@ import { useNavigate } from 'react-router-dom';
 import { Users, LogOut, Plus, Trash2, KeyRound, BarChart3 } from 'lucide-react';
 import { API_URL } from '../config/apiConfig';
 
+interface Resource {
+    id: string;
+    name: string;
+    sectorId?: string;
+}
+
 interface Sector {
     id: string;
     name: string;
@@ -11,6 +17,9 @@ interface Sector {
     soundUrl: string | null;
     hasWaitingRoom: boolean;
     waitingRoomCapacity: number;
+    isHeterogeneous?: boolean;
+    isVisibleOnPanel?: boolean;
+    resources?: Resource[];
 }
 
 interface UserData {
@@ -54,6 +63,10 @@ const Admin: React.FC = () => {
     const [editCallCooldown, setEditCallCooldown] = useState(120);
     const [editHasWaitingRoom, setEditHasWaitingRoom] = useState(false);
     const [editWaitingRoomCapacity, setEditWaitingRoomCapacity] = useState(5);
+    const [editIsHeterogeneous, setEditIsHeterogeneous] = useState(false);
+    const [editIsVisibleOnPanel, setEditIsVisibleOnPanel] = useState(true);
+    const [editResources, setEditResources] = useState<Resource[]>([]);
+    const [newResourceName, setNewResourceName] = useState('');
 
     useEffect(() => {
         fetchData();
@@ -180,7 +193,9 @@ const Admin: React.FC = () => {
                     name: editSectorName,
                     callCooldown: editCallCooldown,
                     hasWaitingRoom: editHasWaitingRoom,
-                    waitingRoomCapacity: editWaitingRoomCapacity
+                    waitingRoomCapacity: editWaitingRoomCapacity,
+                    isHeterogeneous: editIsHeterogeneous,
+                    isVisibleOnPanel: editIsVisibleOnPanel
                 })
             });
 
@@ -192,6 +207,47 @@ const Admin: React.FC = () => {
             } else {
                 const err = await res.json();
                 alert(err.error || 'Erro ao atualizar setor');
+            }
+        } catch (error) {
+            alert('Erro de conexão');
+        }
+    };
+
+    const handleAddResource = async () => {
+        if (!newResourceName.trim() || !editingSector) return;
+        try {
+            const res = await fetch(`${API_URL}/api/sectors/${editingSector.id}/resources`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ name: newResourceName })
+            });
+            if (res.ok) {
+                const added = await res.json();
+                setEditResources([...editResources, added]);
+                setNewResourceName('');
+                fetchData(); // Refresh the list
+            } else {
+                const err = await res.json();
+                alert(err.error || 'Erro ao adicionar recurso');
+            }
+        } catch (error) {
+            alert('Erro de conexão ao adicionar recurso');
+        }
+    };
+
+    const handleDeleteResource = async (resourceId: string) => {
+        if (!confirm('Deseja realmente deletar este guichê/analista?')) return;
+        try {
+            const res = await fetch(`${API_URL}/api/resources/${resourceId}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                setEditResources(editResources.filter(r => r.id !== resourceId));
+                fetchData();
+            } else {
+                const err = await res.json();
+                alert(err.error || 'Erro ao deletar recurso');
             }
         } catch (error) {
             alert('Erro de conexão');
@@ -389,6 +445,9 @@ const Admin: React.FC = () => {
                                                         setEditCallCooldown(s.callCooldown || 120);
                                                         setEditHasWaitingRoom(s.hasWaitingRoom || false);
                                                         setEditWaitingRoomCapacity(s.waitingRoomCapacity || 5);
+                                                        setEditIsHeterogeneous(s.isHeterogeneous || false);
+                                                        setEditIsVisibleOnPanel(s.isVisibleOnPanel ?? true);
+                                                        setEditResources(s.resources || []);
                                                     }}
                                                     className="px-4 py-2 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white rounded-lg transition-all font-bold text-sm"
                                                 >
@@ -523,12 +582,25 @@ const Admin: React.FC = () => {
                                     <div className="pt-4 border-t border-slate-100">
                                         <div className="flex items-center justify-between mb-4">
                                             <div>
+                                                <label className="block text-sm font-bold text-slate-700">Painel Principal (Recepção)</label>
+                                                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter">Exibir chamadas deste setor na tela da TV</p>
+                                            </div>
+                                            <label className="relative inline-flex items-center cursor-pointer">
+                                                <input type="checkbox" className="sr-only peer" checked={editIsVisibleOnPanel} onChange={e => setEditIsVisibleOnPanel(e.target.checked)} />
+                                                <div className="w-11 h-6 bg-slate-300 border border-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:border-slate-400 after:border after:rounded-full after:h-5 after:w-5 after:transition-all after:shadow-md peer-checked:bg-green-600"></div>
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    <div className="pt-4 border-t border-slate-100">
+                                        <div className="flex items-center justify-between mb-4">
+                                            <div>
                                                 <label className="block text-sm font-bold text-slate-700">Sala de Espera Interna</label>
                                                 <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter">Ativar fluxo de sala de espera (pré-atendimento)</p>
                                             </div>
                                             <label className="relative inline-flex items-center cursor-pointer">
                                                 <input type="checkbox" className="sr-only peer" checked={editHasWaitingRoom} onChange={e => setEditHasWaitingRoom(e.target.checked)} />
-                                                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                                <div className="w-11 h-6 bg-slate-300 border border-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:border-slate-400 after:border after:rounded-full after:h-5 after:w-5 after:transition-all after:shadow-md peer-checked:bg-blue-600"></div>
                                             </label>
                                         </div>
                                         
@@ -545,9 +617,53 @@ const Admin: React.FC = () => {
                                             </div>
                                         )}
                                     </div>
+
+                                    <div className="pt-4 border-t border-slate-100">
+                                        <div className="flex items-center justify-between mb-4">
+                                            <div>
+                                                <label className="block text-sm font-bold text-slate-700">Subfilas Heterogêneas (Mesas / Analistas)</label>
+                                                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter">Ativar filas separadas mantendo a mesma ordem geral de chegada.</p>
+                                            </div>
+                                            <label className="relative inline-flex items-center cursor-pointer">
+                                                <input type="checkbox" className="sr-only peer" checked={editIsHeterogeneous} onChange={e => setEditIsHeterogeneous(e.target.checked)} />
+                                                <div className="w-11 h-6 bg-slate-300 border border-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:border-slate-400 after:border after:rounded-full after:h-5 after:w-5 after:transition-all after:shadow-md peer-checked:bg-purple-600"></div>
+                                            </label>
+                                        </div>
+
+                                        {editIsHeterogeneous && (
+                                            <div className="animate-in pb-4 slide-in-from-top-2 fade-in duration-200">
+                                                <div className="flex gap-2">
+                                                    <input 
+                                                        type="text" 
+                                                        placeholder="Ex: Mesa 1, Analista João..." 
+                                                        className={theInputStyle}
+                                                        value={newResourceName}
+                                                        onChange={e => setNewResourceName(e.target.value)}
+                                                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddResource(); } }}
+                                                    />
+                                                    <button type="button" onClick={handleAddResource} className="px-4 py-2 bg-purple-100 text-purple-700 hover:bg-purple-600 hover:text-white rounded-lg font-bold transition-all whitespace-nowrap">
+                                                        + Adicionar
+                                                    </button>
+                                                </div>
+                                                <div className="mt-3 space-y-2 max-h-32 overflow-y-auto">
+                                                    {editResources.map(res => (
+                                                        <div key={res.id} className="flex items-center justify-between bg-slate-50 px-3 py-2 border border-slate-200 rounded-lg">
+                                                            <span className="font-medium text-slate-700 text-sm">{res.name}</span>
+                                                            <button type="button" onClick={() => handleDeleteResource(res.id)} className="text-red-500 hover:bg-red-50 p-1 rounded">
+                                                                <Trash2 className="w-4 h-4" />
+                                                            </button>
+                                                        </div>
+                                                    ))}
+                                                    {editResources.length === 0 && (
+                                                        <div className="text-xs text-slate-500 italic text-center py-2">Nenhum recurso cadastrado.</div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
 
-                                <div className="flex justify-end gap-3 pt-2">
+                                <div className="flex justify-end gap-3 pt-2 border-t border-slate-100 mt-4">
                                     <button type="button" onClick={() => setEditingSector(null)} className="px-5 py-2.5 text-slate-600 hover:bg-slate-100 rounded-lg font-bold transition-colors">Cancelar</button>
                                     <button type="submit" className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold transition-colors">
                                         Salvar Configurações

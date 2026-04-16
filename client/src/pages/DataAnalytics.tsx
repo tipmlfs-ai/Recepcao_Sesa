@@ -8,7 +8,7 @@ import {
 } from 'recharts';
 import { 
     Activity, ShieldCheck, Clock, FileWarning, ArrowLeft, BarChart3, TrendingUp,
-    Download, ChevronDown, FileText, FileSpreadsheet, Mail
+    Download, ChevronDown, FileText, FileSpreadsheet, Mail, X
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -28,7 +28,16 @@ const DataAnalytics: React.FC = () => {
     const navigate = useNavigate();
     const [visits, setVisits] = useState<VisitData[]>([]);
     const [loading, setLoading] = useState(true);
-    const [exportMenuOpen, setExportMenuOpen] = useState(false);
+    const [showExportModal, setShowExportModal] = useState(false);
+    const [exportFilterType, setExportFilterType] = useState<'all' | 'custom'>('all');
+    const [exportStartDate, setExportStartDate] = useState(() => {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+    });
+    const [exportEndDate, setExportEndDate] = useState(() => {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    });
 
     useEffect(() => {
         fetchData();
@@ -58,28 +67,30 @@ const DataAnalytics: React.FC = () => {
         
         let missingPhones = 0;
         let nullCodes = 0;
-        const uniqueCpfs = new Set();
+        const uniqueDailyCpfs = new Set();
         let totalTimeWaiting = 0;
         let finishedCount = 0;
 
         visits.forEach(v => {
             if (!v.citizen?.phone) missingPhones++;
             if (!v.code) nullCodes++;
-            uniqueCpfs.add(v.citizenId);
+            
+            const dateStr = new Date(v.timestamp).toLocaleDateString('pt-BR');
+            uniqueDailyCpfs.add(`${v.citizenId}-${dateStr}`);
 
             if (v.ticketStatus === 'FINISHED') {
-                // Approximate wait time assuming code structure or logic.
-                // Since we don't track finishTime in DB directly for this project, 
-                // we simulate latency calculation based on timestamp age for demonstration,
-                // or just measure average age of pending tickets.
-                const ageMinutes = (Date.now() - new Date(v.timestamp).getTime()) / 60000;
+                let endTime = v.finishedAt ? new Date(v.finishedAt).getTime() : 
+                              v.calledAt ? new Date(v.calledAt).getTime() : 
+                              new Date(v.timestamp).getTime() + (15 * 60000); // fallback of 15mins for very old mock data
+
+                const ageMinutes = Math.max(0, (endTime - new Date(v.timestamp).getTime()) / 60000);
                 totalTimeWaiting += ageMinutes;
                 finishedCount++;
             }
         });
 
         const completeness = 100 - ((missingPhones + nullCodes) / (visits.length * 2) * 100);
-        const duplications = visits.length - uniqueCpfs.size;
+        const duplications = visits.length - uniqueDailyCpfs.size;
         const avgLatency = finishedCount > 0 ? (totalTimeWaiting / finishedCount) : 0;
 
         return {
@@ -133,10 +144,25 @@ const DataAnalytics: React.FC = () => {
     };
 
     const handleExport = async (type: 'pdf' | 'xlsx') => {
-        setExportMenuOpen(false);
+        setShowExportModal(false);
         const loadingId = toast.loading(`Gerando exportação global ${type.toUpperCase()}...`);
         try {
-            const res = await fetch(`${API_URL}/api/export/${type}?filterType=month&date=${new Date().toISOString()}`, {
+            let fetchUrl = `${API_URL}/api/export/${type}`;
+            if (exportFilterType === 'custom') {
+                if (!exportStartDate || !exportEndDate) {
+                    toast.dismiss(loadingId);
+                    toast.warning("Selecione as datas inicial e final para exportar.");
+                    return;
+                }
+                if (new Date(exportStartDate) > new Date(exportEndDate)) {
+                    toast.dismiss(loadingId);
+                    toast.error("A data inicial não pode ser maior que a final.");
+                    return;
+                }
+                fetchUrl += `?filterType=custom&startDate=${exportStartDate}&endDate=${exportEndDate}`;
+            }
+
+            const res = await fetch(fetchUrl, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             
@@ -175,8 +201,89 @@ const DataAnalytics: React.FC = () => {
     };
 
     const handleScheduleEmail = () => {
-        setExportMenuOpen(false);
+        setShowExportModal(false);
         toast.info("A funcionalidade de agendamento por e-mail está em prévia e será lançada na próxima versão.");
+    };
+
+    const handleDownloadKPIDict = () => {
+        const printContent = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="utf-8">
+                <title>Dicionário de KPIs - SESA</title>
+                <style>
+                    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #333; line-height: 1.6; padding: 40px; }
+                    .header { text-align: center; border-bottom: 2px solid #6366f1; padding-bottom: 20px; margin-bottom: 30px; }
+                    h1 { color: #1e293b; font-size: 24px; margin: 0; }
+                    .subtitle { color: #64748b; font-size: 14px; }
+                    .kpi-block { margin-bottom: 30px; background: #f8fafc; padding: 20px; border-left: 4px solid #6366f1; border-radius: 4px; }
+                    .kpi-title { font-size: 18px; font-weight: bold; color: #0f172a; margin-top: 0; display: flex; align-items: center; }
+                    .kpi-desc { margin-top: 10px; }
+                    @media print {
+                        body { padding: 0; }
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <h1>Dicionário Oficial de KPIs</h1>
+                    <div class="subtitle">Secretaria Municipal de Saúde - Inteligência de Dados</div>
+                </div>
+
+                <div class="kpi-block" style="border-left-color: #10b981;">
+                    <h2 class="kpi-title">Completude de Dados (%)</h2>
+                    <div class="kpi-desc">
+                        <strong>O que mede:</strong> Avalia a qualidade do preenchimento de dados na recepção.<br/><br/>
+                        <strong>Como funciona:</strong> Verifica a proporção de cidadãos que foram registrados com telefone válido e código gerado com sucesso em relação ao total de atendimentos. Valores próximos a 100% indicam ótima precisão da recepção.
+                    </div>
+                </div>
+
+                <div class="kpi-block" style="border-left-color: #f59e0b;">
+                    <h2 class="kpi-title">Risco de Duplicidade (cadastros)</h2>
+                    <div class="kpi-desc">
+                        <strong>O que mede:</strong> Identifica a quantidade de ingressos redundantes (senhas duplas) tirados para o mesmo Cidadão (mesmo CPF) no exato mesmo dia.<br/><br/>
+                        <strong>Como funciona:</strong> Se um cidadão pega duas senhas no mesmo dia, contará como +1 risco de duplicidade. Auxilia a TI e Governança a identificar se a recepção está inserindo usuários repetidos equivocadamente ou problemas de falhas de envio duplo. Visitas do mesmo CPF em dias diferentes são consideradas tráfego normal e NÃO aumentam este risco.
+                    </div>
+                </div>
+
+                <div class="kpi-block" style="border-left-color: #8b5cf6;">
+                    <h2 class="kpi-title">Latência / TME Estimado (minutos)</h2>
+                    <div class="kpi-desc">
+                        <strong>O que mede:</strong> TME (Tempo Médio de Espera) é a diferença de tempo real percorrida entre o momento de emissão da senha até o atendimento ser finalizado (Checkout).<br/><br/>
+                        <strong>Como funciona:</strong> Calcula o tempo exato (em minutos) que um ticket durou ativo (desde a recepção até a baixa no consultório). Esse número é a média global cruzada de todos os setores na tela principal.
+                    </div>
+                </div>
+                
+                <script>
+                    window.onload = function() {
+                        window.print();
+                    }
+                </script>
+            </body>
+            </html>
+        `;
+
+        const iframe = document.createElement('iframe');
+        iframe.style.position = 'fixed';
+        iframe.style.right = '0';
+        iframe.style.bottom = '0';
+        iframe.style.width = '0';
+        iframe.style.height = '0';
+        iframe.style.border = '0';
+        iframe.id = 'kpi-print-iframe';
+        
+        const oldIframe = document.getElementById('kpi-print-iframe');
+        if (oldIframe) document.body.removeChild(oldIframe);
+        
+        document.body.appendChild(iframe);
+        
+        const doc = iframe.contentWindow?.document || iframe.contentDocument;
+        if (doc) {
+            doc.open();
+            doc.write(printContent);
+            doc.close();
+        }
     };
 
     const COLORS = ['#6366f1', '#10b981', '#f43f5e', '#f59e0b', '#8b5cf6'];
@@ -210,44 +317,26 @@ const DataAnalytics: React.FC = () => {
 
                 <div className="relative">
                     <button
-                        onClick={() => setExportMenuOpen(!exportMenuOpen)}
+                        onClick={() => setShowExportModal(true)}
                         className="flex items-center gap-2 px-4 py-2.5 bg-indigo-500/10 border border-indigo-500/50 hover:bg-indigo-500/20 text-indigo-300 font-bold rounded-lg transition-all"
                     >
-                        <Download className="w-4 h-4" /> Exportar Global <ChevronDown className="w-4 h-4" />
+                        <Download className="w-4 h-4" /> Exportar Global
                     </button>
-                    
-                    {exportMenuOpen && (
-                        <div className="absolute right-0 top-full mt-2 w-64 bg-slate-800 border border-slate-600 rounded-xl shadow-2xl z-50 overflow-hidden">
-                            <button 
-                                onClick={() => handleExport('pdf')}
-                                className="w-full text-left px-4 py-3 hover:bg-slate-700 flex items-center gap-3 text-slate-200 font-medium border-b border-slate-700 transition-colors"
-                            >
-                                <div className="bg-red-500/20 p-2 rounded-lg border border-red-500/30"><FileText className="w-4 h-4 text-red-400" /></div>
-                                PDF Premium
-                            </button>
-                            <button 
-                                onClick={() => handleExport('xlsx')}
-                                className="w-full text-left px-4 py-3 hover:bg-slate-700 flex items-center gap-3 text-slate-200 font-medium border-b border-slate-700 transition-colors"
-                            >
-                                <div className="bg-emerald-500/20 p-2 rounded-lg border border-emerald-500/30"><FileSpreadsheet className="w-4 h-4 text-emerald-400" /></div>
-                                XLSX Inteligente
-                            </button>
-                            <button 
-                                onClick={handleScheduleEmail}
-                                className="w-full text-left px-4 py-3 hover:bg-slate-700 flex items-center gap-3 text-slate-300 font-medium transition-colors"
-                            >
-                                <div className="bg-blue-500/20 p-2 rounded-lg border border-blue-500/30"><Mail className="w-4 h-4 text-blue-400" /></div>
-                                Agendar envio por e-mail
-                            </button>
-                        </div>
-                    )}
                 </div>
             </header>
 
             <main className="flex-1 p-6 max-w-7xl mx-auto w-full flex flex-col gap-6">
                 
+                {/* Header dos KPIs e Botão de Exportar Explicativo */}
+                <div className="flex justify-between items-end">
+                    <h2 className="text-lg font-bold text-slate-800">Indicadores de Saúde de Dados</h2>
+                    <button onClick={handleDownloadKPIDict} className="text-sm text-indigo-600 font-bold flex items-center gap-1 hover:text-indigo-800 transition-colors">
+                        <FileText className="w-4 h-4" /> Baixar PDF Explicativo (KPIs)
+                    </button>
+                </div>
+
                 {/* Data Quality Health Indicators */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-2">
                     <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
                         <div className="p-4 bg-emerald-50 rounded-xl text-emerald-600">
                             <ShieldCheck className="w-7 h-7" />
@@ -296,8 +385,8 @@ const DataAnalytics: React.FC = () => {
                             <BarChart3 className="w-5 h-5 text-indigo-500" />
                             Visão Cross-Department
                         </h3>
-                        <div className="flex-1 w-full relative">
-                            <ResponsiveContainer width="100%" height="100%">
+                        <div className="flex-1 w-full relative min-h-[300px]">
+                            <ResponsiveContainer width="100%" height="100%" minHeight={300}>
                                 <BarChart
                                     data={crossDepartmentData}
                                     margin={{ top: 20, right: 30, left: 0, bottom: 5 }}
@@ -330,8 +419,8 @@ const DataAnalytics: React.FC = () => {
                             Análise de Tendência Diária (Gargalos)
                         </h3>
                         {trendData.length > 0 ? (
-                            <div className="flex-1 w-full">
-                                <ResponsiveContainer width="100%" height="100%">
+                            <div className="flex-1 w-full min-h-[300px]">
+                                <ResponsiveContainer width="100%" height="100%" minHeight={300}>
                                     <LineChart
                                         data={trendData}
                                         margin={{ top: 20, right: 30, left: 0, bottom: 5 }}
@@ -367,6 +456,89 @@ const DataAnalytics: React.FC = () => {
 
                 </div>
             </main>
+
+            {/* Modal de Exportação Global */}
+            {showExportModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-slate-900 border border-slate-700 w-full max-w-md rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+                        <header className="px-6 py-4 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
+                            <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                                <Download className="w-5 h-5 text-indigo-400" /> Exportação Global
+                            </h2>
+                            <button onClick={() => setShowExportModal(false)} className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </header>
+                        
+                        <div className="p-6 space-y-6">
+                            <div>
+                                <label className="block text-slate-400 text-sm font-bold uppercase mb-3">Abrangência do Relatório</label>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <button 
+                                        onClick={() => setExportFilterType('all')}
+                                        className={`px-3 py-3 rounded-xl border text-sm font-bold transition-all ${exportFilterType === 'all' ? 'bg-indigo-600 border-indigo-500 text-white shadow-[0_0_15px_rgba(79,70,229,0.5)]' : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200'}`}
+                                    >
+                                        Completo (Tudo)
+                                    </button>
+                                    <button 
+                                        onClick={() => setExportFilterType('custom')}
+                                        className={`px-3 py-3 rounded-xl border text-sm font-bold transition-all ${exportFilterType === 'custom' ? 'bg-indigo-600 border-indigo-500 text-white shadow-[0_0_15px_rgba(79,70,229,0.5)]' : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200'}`}
+                                    >
+                                        Período Específico
+                                    </button>
+                                </div>
+                            </div>
+
+                            {exportFilterType === 'custom' && (
+                                <div className="grid grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-4">
+                                    <div>
+                                        <label className="block text-slate-400 text-xs font-bold uppercase mb-2 ml-1">Data Inicial</label>
+                                        <input
+                                            type="date"
+                                            value={exportStartDate}
+                                            onChange={(e) => setExportStartDate(e.target.value)}
+                                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:ring-2 focus:ring-indigo-500 outline-none [&::-webkit-calendar-picker-indicator]:invert"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-slate-400 text-xs font-bold uppercase mb-2 ml-1">Data Final</label>
+                                        <input
+                                            type="date"
+                                            value={exportEndDate}
+                                            onChange={(e) => setExportEndDate(e.target.value)}
+                                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:ring-2 focus:ring-indigo-500 outline-none [&::-webkit-calendar-picker-indicator]:invert"
+                                        />
+                                    </div>
+                                </div>
+                            )}
+
+                            <div>
+                                <label className="block text-slate-400 text-sm font-bold uppercase mb-3">Formato de Exportação</label>
+                                <div className="grid grid-cols-2 gap-3 mb-3">
+                                    <button 
+                                        onClick={() => handleExport('pdf')}
+                                        className="px-4 py-3 rounded-xl bg-slate-800 border border-red-500/30 text-white text-sm font-bold hover:bg-slate-700 hover:border-red-500 transition-all flex flex-col justify-center items-center gap-1"
+                                    >
+                                        <FileText className="w-5 h-5 text-red-400" /> Exportar PDF
+                                    </button>
+                                    <button 
+                                        onClick={() => handleExport('xlsx')}
+                                        className="px-4 py-3 rounded-xl bg-slate-800 border border-emerald-500/30 text-white text-sm font-bold hover:bg-slate-700 hover:border-emerald-500 transition-all flex flex-col justify-center items-center gap-1"
+                                    >
+                                        <FileSpreadsheet className="w-5 h-5 text-emerald-400" /> Exportar XLSX
+                                    </button>
+                                </div>
+                                <button 
+                                    onClick={handleScheduleEmail}
+                                    className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-blue-500/30 text-slate-300 text-sm font-bold hover:bg-slate-700 transition-all flex justify-center items-center gap-2"
+                                >
+                                    <Mail className="w-4 h-4 text-blue-400" /> Agendar por E-mail
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

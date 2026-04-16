@@ -98,6 +98,33 @@ declare global {
     var lastResetDateStr: string;
 }
 
+// Middleware for JWT Verification
+const authenticateToken = (req: Request, res: Response, next: NextFunction) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (!token || token === 'null' || token === 'undefined') {
+        return res.status(401).json({ error: 'Access denied. Token missing or invalid (null/undefined).' });
+    }
+
+    jwt.verify(token, JWT_SECRET, (err, decodedUser) => {
+        if (err) {
+            console.error('[Auth] JWT Verify Error:', err.message);
+            return res.status(403).json({ error: 'Invalid token.', details: err.message });
+        }
+        (req as any).user = decodedUser;
+        next();
+    });
+};
+
+const requireAdmin = (req: Request, res: Response, next: NextFunction) => {
+    const userRole = (req as any).user?.role;
+    if (userRole !== 'ADMIN') {
+        return res.status(403).json({ error: 'Admin access required.' });
+    }
+    next();
+};
+
 // API Routes
 app.get('/', (req, res) => {
     res.send(`
@@ -117,6 +144,7 @@ app.get('/api/sectors', async (req, res) => {
     try {
         const sectors = await prisma.sector.findMany({
             orderBy: { name: 'asc' },
+            include: { resources: true }
         });
         res.json(sectors);
     } catch (error: any) {
@@ -128,7 +156,7 @@ app.get('/api/sectors/:id', async (req, res) => {
     try {
         const sector = await prisma.sector.findUnique({
             where: { id: req.params.id },
-            include: { user: true } // Include user when getting single sector just in case
+            include: { user: true, resources: true } // Include user and resources
         });
         if (!sector) {
             return res.status(404).json({ error: 'Sector not found' });
@@ -136,6 +164,45 @@ app.get('/api/sectors/:id', async (req, res) => {
         res.json(sector);
     } catch (error) {
         res.status(500).json({ error: 'Failed to fetch sector' });
+    }
+});
+
+// --- RESOURCE MANAGEMENT ROUTES --- //
+
+app.post('/api/sectors/:id/resources', authenticateToken, async (req, res) => {
+    try {
+        const sectorId = req.params.id as string;
+        const { name } = req.body;
+
+        const resource = await prisma.resource.create({
+            data: { name, sectorId }
+        });
+        res.status(201).json(resource);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to create resource' });
+    }
+});
+
+app.delete('/api/resources/:id', authenticateToken, async (req, res) => {
+    try {
+        const id = req.params.id as string;
+
+        // Block deletion if there are active visits for this resource
+        const activeVisits = await prisma.visit.findFirst({
+            where: {
+                resourceId: id,
+                ticketStatus: { in: ['WAITING', 'IN_WAITING_ROOM', 'IN_SERVICE'] }
+            }
+        });
+
+        if (activeVisits) {
+            return res.status(400).json({ error: 'Não é possível excluir recurso com tickets ativos na fila.' });
+        }
+
+        await prisma.resource.delete({ where: { id } });
+        res.json({ message: 'Resource deleted' });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to delete resource' });
     }
 });
 
@@ -150,13 +217,15 @@ app.get('/api/queue/display', async (req, res) => {
         const activeVisits = await prisma.visit.findMany({
             where: {
                 ticketStatus: { in: ['IN_SERVICE', 'IN_WAITING_ROOM', 'NO_SHOW'] },
+                sector: { isVisibleOnPanel: true }, // Filter to only sectors visible on panel
                 timestamp: { gte: startOfToday }
             },
             orderBy: { timestamp: 'desc' },
             take: 20,
             include: { 
                 sector: { select: { name: true, callCooldown: true } },
-                citizen: { select: { name: true } }
+                citizen: { select: { name: true } },
+                resource: { select: { name: true } }
             }
         });
 
@@ -184,6 +253,7 @@ app.get('/api/queue/display', async (req, res) => {
             sectorName: v.sector?.name ?? 'Geral',
             sectorCooldown: v.sector?.callCooldown ?? 120,
             citizenName: v.citizen?.name ?? 'Cidadão',
+            resourceName: v.resource?.name,
             status: v.ticketStatus,
             isPriority: v.isPriority,
             timestamp: v.timestamp,
@@ -197,32 +267,6 @@ app.get('/api/queue/display', async (req, res) => {
     }
 });
 
-// Middleware for JWT Verification
-const authenticateToken = (req: Request, res: Response, next: NextFunction) => {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-
-    if (!token || token === 'null' || token === 'undefined') {
-        return res.status(401).json({ error: 'Access denied. Token missing or invalid (null/undefined).' });
-    }
-
-    jwt.verify(token, JWT_SECRET, (err, decodedUser) => {
-        if (err) {
-            console.error('[Auth] JWT Verify Error:', err.message);
-            return res.status(403).json({ error: 'Invalid token.', details: err.message });
-        }
-        (req as any).user = decodedUser;
-        next();
-    });
-};
-
-const requireAdmin = (req: Request, res: Response, next: NextFunction) => {
-    const userRole = (req as any).user?.role;
-    if (userRole !== 'ADMIN') {
-        return res.status(403).json({ error: 'Admin access required.' });
-    }
-    next();
-};
 
 // --- AUTHENTICATION ROUTES --- //
 
@@ -281,7 +325,7 @@ app.get('/api/citizens/:cpf', authenticateToken, async (req, res) => {
 
 app.post('/api/visits', authenticateToken, async (req, res) => {
     try {
-        const { cpf, name, phone, sectorId, isPriority } = req.body;
+        const { cpf, name, phone, sectorId, isPriority, resourceId } = req.body;
         const userId = (req as any).user.id;
 
         // Verify sector is not AWAY
@@ -323,10 +367,11 @@ app.post('/api/visits', authenticateToken, async (req, res) => {
                 citizenId: citizen.cpf,
                 sectorId,
                 userId,
+                resourceId: resourceId || null,
                 isPriority: isPriority || false,
                 ticketStatus: 'WAITING'
             },
-            include: { citizen: true, sector: true }
+            include: { citizen: true, sector: true, resource: true }
         });
 
         // Increment queue count
@@ -577,6 +622,7 @@ app.patch('/api/visits/:code/no-show', authenticateToken, async (req, res) => {
 app.post('/api/sectors/:id/call-next', authenticateToken, async (req, res) => {
     try {
         const sectorId = req.params.id as string;
+        const { resourceId } = req.body || {};
 
         // Get sector info to check if it has a waiting room
         const sector = await prisma.sector.findUnique({
@@ -594,28 +640,62 @@ app.post('/api/sectors/:id/call-next', authenticateToken, async (req, res) => {
 
         // 1. If Sector has Waiting Room, we must call from IN_WAITING_ROOM first
         if (sector.hasWaitingRoom) {
+            // Priority First
             nextVisit = await prisma.visit.findFirst({
                 where: {
                     sectorId,
+                    resourceId: resourceId !== undefined ? resourceId : undefined,
                     ticketStatus: 'IN_WAITING_ROOM',
+                    isPriority: true,
                     timestamp: { gte: startOfToday }
                 },
-                orderBy: { calledToWaitingRoomAt: 'asc' }, // FIFO in the waiting room
+                orderBy: { calledToWaitingRoomAt: 'asc' },
                 include: { citizen: true, sector: true }
             });
+
+            // If no priority, then Normal
+            if (!nextVisit) {
+                nextVisit = await prisma.visit.findFirst({
+                    where: {
+                        sectorId,
+                        resourceId: resourceId !== undefined ? resourceId : undefined,
+                        ticketStatus: 'IN_WAITING_ROOM',
+                        timestamp: { gte: startOfToday }
+                    },
+                    orderBy: { calledToWaitingRoomAt: 'asc' },
+                    include: { citizen: true, sector: true }
+                });
+            }
         }
 
         // 2. If no one in waiting room OR sector doesn't use waiting room, call from WAITING
         if (!nextVisit) {
+            // Priority First
             nextVisit = await prisma.visit.findFirst({
                 where: {
                     sectorId,
+                    resourceId: resourceId !== undefined ? resourceId : undefined,
                     ticketStatus: 'WAITING',
+                    isPriority: true,
                     timestamp: { gte: startOfToday }
                 },
                 orderBy: { timestamp: 'asc' },
                 include: { citizen: true, sector: true }
             });
+
+            // If no priority, then Normal
+            if (!nextVisit) {
+                nextVisit = await prisma.visit.findFirst({
+                    where: {
+                        sectorId,
+                        resourceId: resourceId !== undefined ? resourceId : undefined,
+                        ticketStatus: 'WAITING',
+                        timestamp: { gte: startOfToday }
+                    },
+                    orderBy: { timestamp: 'asc' },
+                    include: { citizen: true, sector: true }
+                });
+            }
         }
 
         if (!nextVisit) {
@@ -632,11 +712,13 @@ app.post('/api/sectors/:id/call-next', authenticateToken, async (req, res) => {
             include: { citizen: true, sector: true }
         });
 
-        // Decrement sector queue count since the person is no longer waiting
-        await prisma.sector.update({
-            where: { id: sectorId },
-            data: { queueCount: { decrement: 1 } }
-        });
+        // Decrement sector queue count ONLY if the person is coming from the general WAITING queue
+        if (nextVisit.ticketStatus === 'WAITING') {
+            await prisma.sector.update({
+                where: { id: sectorId },
+                data: { queueCount: { decrement: 1 } }
+            });
+        }
 
         res.json(updatedVisit);
     } catch (error) {
@@ -743,15 +825,30 @@ app.post('/api/sectors/:id/call-to-waiting-room', authenticateToken, async (req,
         }
 
         // 3. Find next in QUEUE
-        const nextVisit = await prisma.visit.findFirst({
+        // Priority First
+        let nextVisit = await prisma.visit.findFirst({
             where: {
                 sectorId,
                 ticketStatus: 'WAITING',
+                isPriority: true,
                 timestamp: { gte: startOfToday }
             },
             orderBy: { timestamp: 'asc' },
             include: { citizen: true, sector: true }
         });
+
+        // If no priority, then Normal
+        if (!nextVisit) {
+            nextVisit = await prisma.visit.findFirst({
+                where: {
+                    sectorId,
+                    ticketStatus: 'WAITING',
+                    timestamp: { gte: startOfToday }
+                },
+                orderBy: { timestamp: 'asc' },
+                include: { citizen: true, sector: true }
+            });
+        }
 
         if (!nextVisit) {
             return res.status(404).json({ error: 'Nenhum cidadão aguardando na fila da recepção.' });
@@ -765,6 +862,12 @@ app.post('/api/sectors/:id/call-to-waiting-room', authenticateToken, async (req,
                 calledToWaitingRoomAt: new Date()
             },
             include: { citizen: true, sector: true }
+        });
+
+        // 5. Decrement sector queue count since the person left the global WAITING queue
+        await prisma.sector.update({
+            where: { id: sectorId },
+            data: { queueCount: { decrement: 1 } }
         });
 
         res.json(updatedVisit);
@@ -805,7 +908,7 @@ app.get('/api/sectors/:id/in-service', authenticateToken, async (req, res) => {
 app.patch('/api/sectors/:id', authenticateToken, requireAdmin, async (req, res) => {
     try {
         const id = req.params.id as string;
-        const { name, callCooldown, soundUrl, hasWaitingRoom, waitingRoomCapacity } = req.body;
+        const { name, callCooldown, soundUrl, hasWaitingRoom, waitingRoomCapacity, isHeterogeneous, isVisibleOnPanel } = req.body;
 
         const updatedSector = await prisma.sector.update({
             where: { id },
@@ -814,7 +917,9 @@ app.patch('/api/sectors/:id', authenticateToken, requireAdmin, async (req, res) 
                 callCooldown: callCooldown !== undefined ? parseInt(callCooldown) : undefined,
                 soundUrl,
                 hasWaitingRoom: hasWaitingRoom !== undefined ? Boolean(hasWaitingRoom) : undefined,
-                waitingRoomCapacity: waitingRoomCapacity !== undefined ? parseInt(waitingRoomCapacity) : undefined
+                waitingRoomCapacity: waitingRoomCapacity !== undefined ? parseInt(waitingRoomCapacity) : undefined,
+                isHeterogeneous: isHeterogeneous !== undefined ? Boolean(isHeterogeneous) : undefined,
+                isVisibleOnPanel: isVisibleOnPanel !== undefined ? Boolean(isVisibleOnPanel) : undefined
             },
         });
 
@@ -869,7 +974,40 @@ app.patch('/api/sectors/:id/queue', authenticateToken, async (req, res) => {
     }
 });
 
+app.get('/api/sync-queues-manual', async (req, res) => {
+    try {
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+
+        const sectors = await prisma.sector.findMany();
+        let synced = [];
+
+        for (const sector of sectors) {
+            const actualCount = await prisma.visit.count({
+                where: {
+                    sectorId: sector.id,
+                    ticketStatus: 'WAITING',
+                    timestamp: { gte: startOfToday }
+                }
+            });
+
+            if (sector.queueCount !== actualCount) {
+                await prisma.sector.update({
+                    where: { id: sector.id },
+                    data: { queueCount: actualCount }
+                });
+                synced.push({ sector: sector.name, old: sector.queueCount, new: actualCount });
+            }
+        }
+        res.json({ message: "Done", synced });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Failed to sync API' });
+    }
+});
+
 app.use('/api/export', authenticateToken, exportRoutes);
 app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
 });
+

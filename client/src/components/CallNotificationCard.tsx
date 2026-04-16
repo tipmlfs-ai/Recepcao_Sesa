@@ -16,12 +16,13 @@ interface NotificationItem extends Ticket {
 const CallNotificationCard: React.FC = () => {
     const [notifications, setNotifications] = useState<NotificationItem[]>([]);
     const audioRef = useRef<HTMLAudioElement | null>(null);
+    const processedIdsRef = useRef<Set<string>>(new Set());
 
     // Auto-remove expired notifications every second
     useEffect(() => {
         const timer = setInterval(() => {
             const now = Date.now();
-            setNotifications(prev => prev.filter(n => n.expiresAt > now));
+            setNotifications(prev => prev.filter(n => (n.expiresAt + 500) > now));
         }, 1000);
         return () => clearInterval(timer);
     }, []);
@@ -34,29 +35,47 @@ const CallNotificationCard: React.FC = () => {
                 { event: 'UPDATE', schema: 'public', table: 'Visit' },
                 async (payload) => {
                     const updated = payload.new as any;
-                    if (updated.ticketStatus === 'IN_SERVICE') {
+                    
+                    if (updated.ticketStatus === 'IN_SERVICE' || updated.ticketStatus === 'IN_WAITING_ROOM') {
+                        // Prevent duplicate popups for the exact same status triggered multiple times
+                        const statusKey = `${updated.id}-${updated.ticketStatus}`;
+                        if (processedIdsRef.current.has(statusKey)) return;
+                        processedIdsRef.current.add(statusKey);
+                        
                         try {
                             const token = localStorage.getItem('@RecepcaoSesa:token');
                             const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
-                            const [citizenRes, sectorRes] = await Promise.all([
-                                fetch(`${apiUrl}/api/citizens/${updated.citizenId}`, { headers: { 'Authorization': `Bearer ${token}` } }),
+                            const [visitsRes, sectorRes] = await Promise.all([
+                                fetch(`${apiUrl}/api/visits?code=${updated.code}`, { headers: { 'Authorization': `Bearer ${token}` } }),
                                 fetch(`${apiUrl}/api/sectors/${updated.sectorId}`, { headers: { 'Authorization': `Bearer ${token}` } })
                             ]);
 
-                            const citizen = await citizenRes.json();
+                            const visits = await visitsRes.json();
                             const sector = await sectorRes.json();
+                            const visit = Array.isArray(visits) ? visits.find((v: any) => v.id === updated.id) || visits[0] : visits;
+                            const citizen = visit?.citizen || { cpf: updated.citizenId, name: 'Cidadão' };
+
+                            // SENIOR LOGIC: Only notify if coming from external reception
+                            // 1. If status is IN_WAITING_ROOM, it always comes from WAITING (external)
+                            // 2. If status is IN_SERVICE, only notify if the sector DOES NOT have a waiting room
+                            //    (if it has, the person was already called to the internal room and is already there)
+                            const shouldNotify = 
+                                updated.ticketStatus === 'IN_WAITING_ROOM' || 
+                                (updated.ticketStatus === 'IN_SERVICE' && !sector.hasWaitingRoom);
+
+                            if (!shouldNotify) return;
 
                             const newNotification: NotificationItem = {
                                 ...updated,
                                 citizen: { cpf: citizen.cpf, name: citizen.name },
                                 sector: { id: sector.id, name: sector.name, soundUrl: sector.soundUrl },
-                                expiresAt: Date.now() + 30000 // 30 seconds from now
+                                expiresAt: Date.now() + 20000 // Exactly 20 seconds
                             };
 
                             setNotifications(prev => {
-                                // Add new to the beginning, take max 3
-                                const next = [newNotification, ...prev].slice(0, 3);
+                                // Add new to the beginning, take max 5 since duration is longer
+                                const next = [newNotification, ...prev].slice(0, 5);
                                 return next;
                             });
 
@@ -159,7 +178,7 @@ const CallNotificationCard: React.FC = () => {
                     </div>
                     
                     {/* Expiration Progress Bar */}
-                    <div className="absolute bottom-0 left-0 h-1 bg-indigo-500 animate-slide-out-left origin-left w-full" style={{ animationDuration: '30s', animationTimingFunction: 'linear' }} />
+                    <div className="absolute bottom-0 left-0 h-1 bg-gradient-to-r from-transparent via-indigo-400 to-indigo-500 w-full" style={{ animation: 'shrinkX 20s linear forwards', transformOrigin: 'left' }} />
                 </div>
             ))}
         </div>

@@ -12,6 +12,7 @@ interface CallRecord {
     citizen: { name: string };
     sector: { name: string };
     calledAt?: string | null;
+    calledToWaitingRoomAt?: string | null;
 }
 
 const CallsTab: React.FC = () => {
@@ -21,8 +22,12 @@ const CallsTab: React.FC = () => {
     const fetchTodayCalls = async () => {
         try {
             const token = localStorage.getItem('@RecepcaoSesa:token');
-            const today = new Date().toISOString().split('T')[0];
-            const res = await fetch(`${API_URL}/api/visits?date=${today}&filterType=day`, {
+            const todayObj = new Date();
+            const year = todayObj.getFullYear();
+            const month = String(todayObj.getMonth() + 1).padStart(2, '0');
+            const day = String(todayObj.getDate()).padStart(2, '0');
+            const todayFilter = `${year}-${month}-${day}`;
+            const res = await fetch(`${API_URL}/api/visits?filterType=custom&startDate=${todayFilter}&endDate=${todayFilter}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
 
@@ -30,10 +35,17 @@ const CallsTab: React.FC = () => {
                 const data: CallRecord[] = await res.json();
                 // Filter all visits that have been called (have a code)
                 const filtered = data
-                    .filter(v => v.code)
+                    .filter(v => {
+                        if (!v.code) return false;
+                        // Determine if this visit was called from reception
+                        // If it has calledToWaitingRoomAt, that was the call from reception.
+                        // If it doesn't, but has calledAt, then calledAt was the direct call from reception.
+                        const hasReceptionCall = v.calledToWaitingRoomAt || (v.calledAt && !v.calledToWaitingRoomAt);
+                        return !!hasReceptionCall;
+                    })
                     .sort((a, b) => {
-                        const timeA = a.calledAt ? new Date(a.calledAt).getTime() : new Date(a.timestamp).getTime();
-                        const timeB = b.calledAt ? new Date(b.calledAt).getTime() : new Date(b.timestamp).getTime();
+                        const timeA = new Date(a.calledToWaitingRoomAt || a.calledAt || a.timestamp).getTime();
+                        const timeB = new Date(b.calledToWaitingRoomAt || b.calledAt || b.timestamp).getTime();
                         return timeB - timeA;
                     });
                 setCalls(filtered);
@@ -122,7 +134,11 @@ const CallsTab: React.FC = () => {
                                         <span>{call.citizen.name}</span>
                                         <span className="text-slate-600">•</span>
                                         <span className="font-mono">
-                                            Chamado em {new Date(call.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                            {call.calledToWaitingRoomAt || call.calledAt ? (
+                                                <>Chamado em {new Date(call.calledToWaitingRoomAt || call.calledAt!).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</>
+                                            ) : (
+                                                <>Registrado em {new Date(call.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</>
+                                            )}
                                         </span>
                                     </div>
                                 </div>

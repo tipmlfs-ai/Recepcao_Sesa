@@ -9,6 +9,7 @@ import {
 import { API_URL } from '../config/apiConfig';
 import { toast } from 'sonner';
 import { SectorDashboardModal } from '../components/SectorDashboardModal';
+import { supabase } from '../config/supabaseConfig';
 
 const Controller: React.FC = () => {
     const { user, logout } = useAuth();
@@ -22,12 +23,19 @@ const Controller: React.FC = () => {
     const [callingNext, setCallingNext] = useState(false);
     const [cooldown, setCooldown] = useState(0);
     const [currentCitizen, setCurrentCitizen] = useState<{ name: string, calledAt?: string, code?: string } | null>(null);
+    const [activeVisits, setActiveVisits] = useState<any[]>([]);
+    const [now, setNow] = useState(Date.now());
     const [citizenWaitSeconds, setCitizenWaitSeconds] = useState(0);
     const [showNoShowModal, setShowNoShowModal] = useState(false);
     const [noShowLoading, setNoShowLoading] = useState(false);
     const [isDashboardOpen, setIsDashboardOpen] = useState(false);
     const [waitingRoomPatients, setWaitingRoomPatients] = useState<any[]>([]);
     const [callingToWaitingRoom, setCallingToWaitingRoom] = useState(false);
+
+    // Subqueue state
+    const [waitingVisits, setWaitingVisits] = useState<any[]>([]);
+    const [subqueueOpen, setSubqueueOpen] = useState<string | null>(null); // 'GERAL' or resourceId
+    const [showConfirmCall, setShowConfirmCall] = useState(false);
 
     // Fetch the oldest IN_SERVICE visit to set as current and count them
     const fetchNextInService = useCallback(async (sId: string) => {
@@ -38,6 +46,7 @@ const Controller: React.FC = () => {
             });
             if (res.ok) {
                 const data = await res.json();
+                setActiveVisits(data);
                 if (data.length > 0) {
                     setCurrentCitizen({ name: data[0].citizen.name, calledAt: data[0].calledAt, code: data[0].code });
                 } else {
@@ -57,6 +66,7 @@ const Controller: React.FC = () => {
             });
             if (res.ok) {
                 const data = await res.json();
+                setWaitingVisits(data);
                 const inRoom = data.filter((v: any) => v.ticketStatus === 'IN_WAITING_ROOM');
                 setWaitingRoomPatients(inRoom);
             }
@@ -74,11 +84,25 @@ const Controller: React.FC = () => {
     useEffect(() => {
         if (sector?.id) {
             fetchNextInService(sector.id);
-            if (sector.hasWaitingRoom) {
-                fetchWaitingRoom(sector.id);
-            }
+            fetchWaitingRoom(sector.id);
+
+            const channel = supabase
+                .channel('visits-realtime-controller')
+                .on(
+                    'postgres_changes',
+                    { event: '*', schema: 'public', table: 'Visit', filter: `sectorId=eq.${sector.id}` },
+                    () => {
+                        fetchWaitingRoom(sector.id);
+                        fetchNextInService(sector.id);
+                    }
+                )
+                .subscribe();
+
+            return () => {
+                supabase.removeChannel(channel);
+            };
         }
-    }, [sector?.id, sector?.hasWaitingRoom, fetchNextInService, fetchWaitingRoom]);
+    }, [sector?.id, fetchNextInService, fetchWaitingRoom]);
 
     // Handle Cooldown Timer (For general call / waiting room call)
     useEffect(() => {
@@ -111,7 +135,13 @@ const Controller: React.FC = () => {
         return () => clearInterval(timer);
     }, [sector?.id]);
 
-    // Citizen Wait Timer
+    // Universal TICK timer for countdowns
+    useEffect(() => {
+        const timer = setInterval(() => setNow(Date.now()), 1000);
+        return () => clearInterval(timer);
+    }, []);
+
+    // Citizen Wait Timer (for root/general)
     useEffect(() => {
         if (!currentCitizen || !currentCitizen.calledAt) {
             setCitizenWaitSeconds(0);
@@ -203,29 +233,31 @@ const Controller: React.FC = () => {
         navigate('/login');
     };
 
-    const handleCallNext = async () => {
+    const handleCallNext = async (resourceId?: string | null) => {
         if (!sector || cooldown > 0) return;
         setCallingNext(true);
         try {
             const token = localStorage.getItem('@RecepcaoSesa:token');
+            // Include resourceId in the body if provided
+            const body = resourceId !== undefined ? JSON.stringify({ resourceId }) : undefined;
+            
             const res = await fetch(`${API_URL}/api/sectors/${sector.id}/call-next`, {
                 method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}` }
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body
             });
             if (res.ok) {
                 const data = await res.json();
                 toast.success(`Chamando: ${data.citizen?.name || 'Próximo'}`);
 
-                // Set the persistent citizen info
-                if (data.citizen?.name) {
-                    setCurrentCitizen({ name: data.citizen.name, calledAt: data.calledAt, code: data.code });
-                }
+                if (sector) fetchNextInService(sector.id);
 
-                // Clear cooldown immediately on checkout to allow calling next
                 setCooldown(0);
                 if (sector) {
                     localStorage.removeItem(`@RecepcaoSesa:cooldown:${sector.id}`);
                 }
+                setShowConfirmCall(false);
+                setSubqueueOpen(null); // Fecha modal caso aberto
             } else {
                 const err = await res.json();
                 toast.error(err.error || 'Nenhum cidadão na fila / ou na sala de espera.');
@@ -319,22 +351,23 @@ const Controller: React.FC = () => {
         return `${prefix}-`;
     }, [sector?.name]);
 
-    const handleCheckout = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!checkoutCode.trim()) { toast.error('Digite o número do ticket'); return; }
+    const handleCheckout = async (e?: React.FormEvent, forceCode?: string) => {
+        if (e) e.preventDefault();
+        const codeToUse = forceCode || `${checkoutIsPriority ? `P-${sectorPrefix}` : sectorPrefix}${checkoutCode.trim().padStart(3, '0')}`;
+        
+        if (!codeToUse || (!forceCode && !checkoutCode.trim())) { toast.error('Digite o número do ticket'); return; }
+        
         setCheckoutLoading(true);
         try {
             const token = localStorage.getItem('@RecepcaoSesa:token');
-            const prefix = checkoutIsPriority ? `P-${sectorPrefix}` : sectorPrefix;
-            const fullCode = `${prefix}${checkoutCode.trim().padStart(3, '0')}`;
 
-            const res = await fetch(`${API_URL}/api/visits/${fullCode}/checkout`, {
+            const res = await fetch(`${API_URL}/api/visits/${codeToUse}/checkout`, {
                 method: 'PATCH',
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             if (res.ok) {
-                toast.success(`Ticket ${fullCode} finalizado!`);
-                setCheckoutCode('');
+                toast.success(`Ticket ${codeToUse} finalizado!`);
+                if (!forceCode) setCheckoutCode('');
 
                 // Automatically fetch next in service
                 if (sector) {
@@ -427,7 +460,7 @@ const Controller: React.FC = () => {
                 <div className="w-full bg-slate-800/40 backdrop-blur-xl border border-slate-700/50 rounded-3xl p-6 flex flex-col sm:flex-row items-center justify-between shadow-2xl gap-4">
                     <div className="text-center sm:text-left">
                         <p className="text-slate-300 font-bold mb-1.5 flex items-center justify-center sm:justify-start gap-2">
-                            Pessoas na fila de espera
+                            Pessoas na fila da recepção
                         </p>
                         <div className="flex items-center justify-center sm:justify-start gap-2">
                             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.5)]"></span>
@@ -443,8 +476,98 @@ const Controller: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Seção Operacional: Dar Baixa (No topo para agilidade) */}
-                {currentCitizen && (
+                {/* VISÃO DE TABS (SUBFILAS) */}
+                {sector.isHeterogeneous && (
+                    <div className="w-full bg-slate-800/20 rounded-2xl p-4 border border-slate-700/50 flex flex-wrap gap-3 items-center justify-center">
+                        {(() => {
+                            const targetStatus = sector.hasWaitingRoom ? 'IN_WAITING_ROOM' : 'WAITING';
+                            const geralCount = waitingVisits.filter(v => v.ticketStatus === targetStatus && !v.resourceId).length;
+                            const isGeralActive = activeVisits.some(v => !v.resourceId);
+
+                            return (
+                                <button
+                                    onClick={() => setSubqueueOpen('GERAL')}
+                                    className={`group relative overflow-hidden px-6 py-4 rounded-xl font-bold transition-all hover:scale-105 active:scale-95 shadow-lg border flex flex-col justify-center min-w-[220px] ${
+                                        isGeralActive 
+                                        ? 'bg-slate-800/80 border-emerald-500/50 shadow-[0_0_20px_-5px_rgba(16,185,129,0.3)] text-white' 
+                                        : 'bg-slate-800 hover:bg-slate-700 border-slate-600 text-white'
+                                    }`}
+                                >
+                                    <div className={`flex flex-col items-start w-full transition-transform duration-300 ${isGeralActive ? 'group-hover:-translate-y-8' : ''}`}>
+                                        <div className="flex justify-between items-center w-full">
+                                            <span className="text-sm">Geral</span>
+                                            <span className={`px-2 py-0.5 rounded-full text-xs font-black transition-opacity duration-300 ${isGeralActive ? 'group-hover:opacity-0' : ''} ${geralCount > 5 ? 'bg-rose-500 text-white shadow-rose-500/50' : geralCount > 0 ? 'bg-amber-500 text-white shadow-amber-500/50' : 'bg-emerald-500/20 text-emerald-400'}`}>
+                                                {geralCount > 5 ? '🔴 ' : geralCount > 0 ? '🟡 ' : '🟢 '}
+                                                {geralCount}
+                                            </span>
+                                        </div>
+                                        {isGeralActive && (
+                                            <span className="flex items-center gap-1.5 text-[10px] text-emerald-400 font-black uppercase tracking-tighter mt-1 opacity-100 transition-opacity duration-300 group-hover:opacity-0">
+                                                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse border border-emerald-200"></span>
+                                                Atendimento em Curso
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    {isGeralActive && (
+                                        <div className="absolute inset-0 bg-emerald-600 flex items-center justify-center translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-in-out">
+                                            <span className="text-white text-xs font-black uppercase tracking-widest flex items-center gap-2">
+                                                <Users className="w-4 h-4" />
+                                                Ver Atendimento
+                                            </span>
+                                        </div>
+                                    )}
+                                </button>
+                            );
+                        })()}
+
+                        {sector.resources?.map(res => {
+                            const targetStatus = sector.hasWaitingRoom ? 'IN_WAITING_ROOM' : 'WAITING';
+                            const count = waitingVisits.filter(v => v.ticketStatus === targetStatus && v.resourceId === res.id).length;
+                            const isResourceActive = activeVisits.some(v => v.resourceId === res.id);
+                            
+                            return (
+                                <button
+                                    key={res.id}
+                                    onClick={() => setSubqueueOpen(res.id)}
+                                    className={`group relative overflow-hidden px-6 py-4 rounded-xl font-bold transition-all hover:scale-105 active:scale-95 shadow-lg border flex flex-col justify-center min-w-[220px] ${
+                                        isResourceActive 
+                                        ? 'bg-indigo-600/30 border-emerald-500/50 shadow-[0_0_20px_-5px_rgba(16,185,129,0.3)] text-indigo-50' 
+                                        : 'bg-indigo-600/20 hover:bg-indigo-600/40 border-indigo-500/30 text-indigo-100'
+                                    }`}
+                                >
+                                    <div className={`flex flex-col items-start w-full transition-transform duration-300 ${isResourceActive ? 'group-hover:-translate-y-8' : ''}`}>
+                                        <div className="flex justify-between items-center w-full">
+                                            <span className="text-sm pr-3 truncate max-w-[150px] text-left">{res.name}</span>
+                                            <span className={`px-2 py-0.5 rounded-full text-xs font-black transition-opacity duration-300 flex-shrink-0 ${isResourceActive ? 'group-hover:opacity-0' : ''} ${count > 5 ? 'bg-rose-500 text-white shadow-rose-500/50' : count > 0 ? 'bg-amber-500 text-white shadow-amber-500/50' : 'bg-emerald-500/20 text-emerald-400'}`}>
+                                                {count > 5 ? '🔴 ' : count > 0 ? '🟡 ' : '🟢 '}
+                                                {count}
+                                            </span>
+                                        </div>
+                                        {isResourceActive && (
+                                            <span className="flex items-center gap-1.5 text-[10px] text-emerald-400 font-black uppercase tracking-tighter mt-1 opacity-100 transition-opacity duration-300 group-hover:opacity-0">
+                                                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse border border-emerald-200"></span>
+                                                Atendimento em Curso
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    {isResourceActive && (
+                                        <div className="absolute inset-0 bg-emerald-600 flex items-center justify-center translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-in-out">
+                                            <span className="text-white text-xs font-black uppercase tracking-widest flex items-center gap-2">
+                                                <Users className="w-4 h-4" />
+                                                Ver Atendimento
+                                            </span>
+                                        </div>
+                                    )}
+                                </button>
+                            );
+                        })}
+                    </div>
+                )}
+
+                {/* Seção Operacional: Dar Baixa (No topo para agilidade) SOMENTE SE NÃO FOR HETEROGENEO */}
+                {!sector.isHeterogeneous && currentCitizen && (
                     <div className="w-full bg-slate-800/40 backdrop-blur-xl border border-slate-700/50 rounded-3xl p-6 mt-4 shadow-2xl transition-all duration-300 hover:border-emerald-500/20">
                         <div className="flex items-center gap-3 mb-5 px-1">
                             <div className="p-2 bg-emerald-500/10 rounded-lg border border-emerald-500/20">
@@ -553,7 +676,7 @@ const Controller: React.FC = () => {
                             </button>
 
                             <button
-                                onClick={handleCallNext}
+                                onClick={() => handleCallNext()}
                                 disabled={callingNext || waitingRoomPatients.length === 0 || currentCitizen !== null}
                                 className={`w-full group relative overflow-hidden flex items-center justify-center gap-2 p-4 rounded-xl font-bold transition-all duration-300 active:scale-[0.98] ${(waitingRoomPatients.length === 0 || currentCitizen !== null)
                                         ? 'bg-slate-800 border-2 border-slate-700 text-slate-500 cursor-not-allowed'
@@ -576,7 +699,7 @@ const Controller: React.FC = () => {
                 {/* Legacy Chamar Próximo (If no waiting room) */}
                 {!sector.hasWaitingRoom && (
                     <button
-                        onClick={handleCallNext}
+                        onClick={() => handleCallNext()}
                         disabled={callingNext || sector.queueCount === 0 || cooldown > 0 || sector.status !== 'AVAILABLE' || currentCitizen !== null}
                         className={`w-full group relative overflow-hidden flex flex-col items-center justify-center gap-2 p-6 rounded-2xl font-bold transition-all duration-300 active:scale-[0.98] ${sector.status !== 'AVAILABLE'
                             ? 'bg-slate-800 border-2 border-slate-700 text-slate-500 cursor-not-allowed'
@@ -650,8 +773,8 @@ const Controller: React.FC = () => {
                     </button>
                 </div>
 
-                {/* Em Atendimento — citizen info card (shown for all sectors) */}
-                {currentCitizen && (() => {
+                {/* Em Atendimento — citizen info card (shown for all sectors OUTSIDE modal if not heterogeneous) */}
+                {!sector.isHeterogeneous && currentCitizen && (() => {
                     const maxWait = (sector as any).callCooldown ?? 120;
                     const timeElapsed = citizenWaitSeconds;
                     const isExpired = timeElapsed >= maxWait;
@@ -701,6 +824,187 @@ const Controller: React.FC = () => {
                 })()}
             </main>
 
+            {/* MODAL DE SUBFILA ESPECÍFICA */}
+            {subqueueOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                    <div className="bg-slate-800 border border-slate-600 rounded-3xl p-6 shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col">
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="text-2xl font-black text-white">
+                                Fila: {subqueueOpen === 'GERAL' ? 'Geral' : sector?.resources?.find(r => r.id === subqueueOpen)?.name}
+                            </h3>
+                            <button onClick={() => setSubqueueOpen(null)} className="text-slate-400 hover:text-white px-3 py-1 bg-slate-700/50 hover:bg-slate-600 rounded-lg">Fechar</button>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto pr-2 rounded-xl border border-slate-700/50 bg-slate-900/50 p-2">
+                            {(() => {
+                                const targetStatus = sector?.hasWaitingRoom ? 'IN_WAITING_ROOM' : 'WAITING';
+                                const filteredQueue = waitingVisits
+                                    .filter(v => v.ticketStatus === targetStatus && (subqueueOpen === 'GERAL' ? !v.resourceId : v.resourceId === subqueueOpen))
+                                    // Ordem: Prioridade primeiro, depois por timestamp (chegada)
+                                    .sort((a, b) => {
+                                        if (a.isPriority && !b.isPriority) return -1;
+                                        if (!a.isPriority && b.isPriority) return 1;
+                                        return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+                                    });
+
+                                if (filteredQueue.length === 0) return <p className="text-slate-500 p-8 text-center">Ninguém aguardando nesta fila.</p>;
+
+                                return (
+                                    <div className="space-y-2">
+                                        {filteredQueue.map((v, idx) => (
+                                            <div key={v.id} className="bg-slate-800 p-4 rounded-xl border border-slate-700 flex justify-between items-center">
+                                                <div>
+                                                    <span className="text-xs text-indigo-400 font-bold uppercase tracking-widest mr-2">#{idx + 1}</span>
+                                                    <span className="font-bold text-white text-lg">{v.citizen?.name}</span>
+                                                    <div className="text-xs text-slate-400 mt-1 font-mono">Chegou às: {new Date(v.timestamp).toLocaleTimeString('pt-BR')}</div>
+                                                </div>
+                                                {v.isPriority && <span className="bg-amber-500/20 text-amber-500 text-xs px-2 py-1 rounded-md font-bold border border-amber-500/30">PREFERENCIAL</span>}
+                                            </div>
+                                        ))}
+                                    </div>
+                                );
+                            })()}
+                        </div>
+
+                        <div className="mt-6 pt-4 border-t border-slate-700">
+                            {(() => {
+                                const activeForTab = activeVisits.find(v => (subqueueOpen === 'GERAL' ? !v.resourceId : v.resourceId === subqueueOpen));
+
+                                if (activeForTab) {
+                                    const maxWait = (sector as any).callCooldown ?? 120;
+                                    const calledAtDate = new Date(activeForTab.calledAt).getTime();
+                                    const timeElapsed = Math.floor((now - calledAtDate) / 1000);
+                                    const isExpired = timeElapsed >= maxWait;
+                                    const remaining = Math.max(0, maxWait - timeElapsed);
+
+                                    return (
+                                        <div className="w-full border rounded-2xl p-6 shadow-[0_0_40px_rgba(0,0,0,0.3)] bg-gradient-to-br from-indigo-900/60 to-slate-800/90 border-indigo-500/40 animate-in fade-in zoom-in-95">
+                                            <div className="flex justify-between items-start mb-2">
+                                                <div className="flex items-center gap-2 px-3 py-1 rounded-full text-xs font-black uppercase tracking-widest border bg-emerald-500/10 border-emerald-500/30 text-emerald-400">
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                                    Em Atendimento
+                                                </div>
+                                                {timeElapsed > 0 && (
+                                                    <div className="border px-3 py-1 rounded-lg flex items-center gap-2 shadow-inner text-sm font-bold font-mono bg-slate-900/80 border-slate-700 text-emerald-400">
+                                                        {Math.floor(timeElapsed / 60).toString().padStart(2, '0')}:{(timeElapsed % 60).toString().padStart(2, '0')}
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <div className="mb-4 text-center">
+                                                <p className="text-2xl font-bold text-white truncate pr-2 mt-2">{activeForTab.citizen?.name}</p>
+                                            </div>
+
+                                            <form onSubmit={handleCheckout} className="flex flex-col gap-3 items-stretch mb-4">
+                                                <div className="relative group flex">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setCheckoutIsPriority(!checkoutIsPriority)}
+                                                        className={`absolute left-2 top-1/2 -translate-y-1/2 flex items-center h-10 px-3 z-10 rounded-xl font-black text-xs transition-all border shadow-sm ${
+                                                            checkoutIsPriority 
+                                                            ? 'bg-amber-500 text-white border-amber-400 hover:bg-amber-400' 
+                                                            : 'bg-indigo-600 text-white border-indigo-500 hover:bg-indigo-500'
+                                                        }`}
+                                                        title="Clique para alternar entre Normal e Preferencial"
+                                                    >
+                                                        {checkoutIsPriority ? <Accessibility className="w-3.5 h-3.5 mr-1" /> : <Hash className="w-3.5 h-3.5 mr-1" />}
+                                                        <span className="uppercase tracking-widest">{checkoutIsPriority ? `P-${sectorPrefix}` : sectorPrefix}</span>
+                                                    </button>
+                                                    <input
+                                                        type="text"
+                                                        value={checkoutCode}
+                                                        onChange={(e) => setCheckoutCode(e.target.value.toUpperCase())}
+                                                        placeholder="000"
+                                                        className="w-full h-14 bg-slate-900/50 border-2 border-slate-700/50 rounded-2xl pl-32 pr-4 text-white placeholder-slate-700 focus:outline-none focus:border-emerald-500/50 focus:bg-slate-900 transition-all font-black text-xl tracking-[0.2em] shadow-inner"
+                                                        maxLength={4}
+                                                    />
+                                                </div>
+                                                <button
+                                                    type="submit"
+                                                    disabled={checkoutLoading || !checkoutCode}
+                                                    className={`h-14 px-8 rounded-2xl font-black text-xs uppercase tracking-[0.15em] transition-all duration-300 flex items-center justify-center gap-2 shadow-lg active:scale-95 w-full ${checkoutLoading || !checkoutCode
+                                                            ? 'bg-slate-800 border border-slate-700 text-slate-600 cursor-not-allowed'
+                                                            : 'bg-gradient-to-r from-emerald-600 to-emerald-500 text-white hover:from-emerald-500 hover:to-emerald-400 hover:shadow-emerald-500/20 hover:-translate-y-0.5 border border-emerald-400/20'
+                                                        }`}
+                                                >
+                                                    {checkoutLoading ? (
+                                                        <Loader2 className="w-5 h-5 animate-spin" />
+                                                    ) : (
+                                                        <>
+                                                            <span>Confirmar e Dar Baixa</span>
+                                                            <CheckCheck className="w-4 h-4 opacity-50" />
+                                                        </>
+                                                    )}
+                                                </button>
+                                            </form>
+
+                                            <div className="border-t border-slate-700/50 pt-3">
+                                                {isExpired ? (
+                                                    <button
+                                                        onClick={() => {
+                                                            setCurrentCitizen(activeForTab);
+                                                            setShowNoShowModal(true);
+                                                        }}
+                                                        className="w-full py-2.5 px-4 bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/40 rounded-xl text-orange-400 font-bold transition-all flex items-center justify-center gap-2 text-sm"
+                                                    >
+                                                        <AlertTriangle className="w-4 h-4" /> Encerrar por Não Comparecimento
+                                                    </button>
+                                                ) : (
+                                                    <div className="w-full py-2 px-4 bg-slate-900/40 rounded-xl text-slate-500 text-xs flex items-center justify-center gap-2">
+                                                        <span>Encerramento (Não Comparecimento) disponível em <strong className="text-slate-400 font-mono">{Math.floor(remaining / 60).toString().padStart(2, '0')}:{(remaining % 60).toString().padStart(2, '0')}</strong></span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                }
+
+                                return (
+                                    <button
+                                        onClick={() => setShowConfirmCall(true)}
+                                        disabled={waitingVisits.filter(v => v.ticketStatus === (sector?.hasWaitingRoom ? 'IN_WAITING_ROOM' : 'WAITING') && (subqueueOpen === 'GERAL' ? !v.resourceId : v.resourceId === subqueueOpen)).length === 0 || cooldown > 0}
+                                        className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:bg-slate-700 disabled:text-slate-500 text-white font-black text-lg py-4 rounded-xl flex items-center justify-center gap-3 transition-colors shadow-lg"
+                                    >
+                                        <PhoneCall className="w-5 h-5" />
+                                        Chamar Primeiro da Fila
+                                    </button>
+                                );
+                            })()}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* CONFIRMATION GUARD DIALOG */}
+            {showConfirmCall && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/90 backdrop-blur-md p-4 animate-in zoom-in-95 duration-200">
+                    <div className="bg-slate-800 border border-slate-600 rounded-3xl p-8 max-w-md w-full shadow-2xl relative overflow-hidden text-center">
+                        <div className="absolute top-0 left-0 w-full h-1 bg-indigo-500"></div>
+                        <AlertTriangle className="w-16 h-16 text-indigo-400 mx-auto mb-4" />
+                        <h3 className="text-2xl font-black text-white mb-2">Atenção</h3>
+                        <p className="text-slate-300 font-medium mb-8">
+                            Certifique-se de que o guichê esteja livre e que os trâmites do atendimento anterior foram <strong>totalmente finalizados</strong> no sistema antes de chamar a próxima senha.
+                        </p>
+                        
+                        <div className="flex gap-4">
+                            <button
+                                onClick={() => setShowConfirmCall(false)}
+                                className="flex-1 py-3 px-4 bg-slate-700 hover:bg-slate-600 rounded-xl text-white font-bold transition-all"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={() => handleCallNext(subqueueOpen === 'GERAL' ? null : subqueueOpen)}
+                                disabled={callingNext}
+                                className="flex-1 py-3 px-4 bg-indigo-600 hover:bg-indigo-500 focus:ring-4 focus:ring-indigo-500/50 outline-none rounded-xl text-white font-black transition-all flex justify-center items-center gap-2 shadow-lg shadow-indigo-500/30"
+                            >
+                                {callingNext ? <Loader2 className="w-5 h-5 animate-spin"/> : 'Sim, Chamar Próximo'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {sector && (
                 <SectorDashboardModal
                     isOpen={isDashboardOpen}
@@ -720,7 +1024,6 @@ const Controller: React.FC = () => {
                             </div>
                             <div>
                                 <h3 className="text-xl font-bold text-white mb-1">Encerrar Atendimento</h3>
-                                <p className="text-rose-400 font-mono text-sm font-bold tracking-widest">{currentCitizen.code}</p>
                             </div>
                         </div>
                         

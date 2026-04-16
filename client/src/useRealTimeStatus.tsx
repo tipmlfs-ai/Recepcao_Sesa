@@ -32,7 +32,7 @@ export function useRealTimeStatus() {
                     console.log('[Realtime] UPDATE recebido:', payload);
                     const updatedSector = payload.new as Sector;
                     setSectors((prev) =>
-                        prev.map((s) => (s.id === updatedSector.id ? updatedSector : s))
+                        prev.map((s) => (s.id === updatedSector.id ? { ...s, ...updatedSector } : s))
                     );
                 }
             )

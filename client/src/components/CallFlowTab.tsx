@@ -19,8 +19,12 @@ const CallFlowTab: React.FC = () => {
     const fetchTodayCalls = async () => {
         try {
             const token = localStorage.getItem('@RecepcaoSesa:token');
-            const today = new Date().toISOString().split('T')[0];
-            const res = await fetch(`${API_URL}/api/visits?date=${today}&filterType=day`, {
+            const todayObj = new Date();
+            const year = todayObj.getFullYear();
+            const month = String(todayObj.getMonth() + 1).padStart(2, '0');
+            const day = String(todayObj.getDate()).padStart(2, '0');
+            const todayFilter = `${year}-${month}-${day}`;
+            const res = await fetch(`${API_URL}/api/visits?filterType=custom&startDate=${todayFilter}&endDate=${todayFilter}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
 

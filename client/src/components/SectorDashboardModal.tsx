@@ -57,7 +57,13 @@ export const SectorDashboardModal: React.FC<SectorDashboardModalProps> = ({ isOp
             const headers = { 'Authorization': `Bearer ${token}` };
 
             // Fetch today
-            const resToday = await fetch(`${API_URL}/api/visits?sectorId=${sectorId}&ticketStatus=FINISHED&filterType=day&date=${new Date().toISOString()}`, { headers });
+            const todayObj = new Date();
+            const year = todayObj.getFullYear();
+            const month = String(todayObj.getMonth() + 1).padStart(2, '0');
+            const day = String(todayObj.getDate()).padStart(2, '0');
+            const todayFilter = `${year}-${month}-${day}`;
+            
+            const resToday = await fetch(`${API_URL}/api/visits?sectorId=${sectorId}&ticketStatus=FINISHED&filterType=custom&startDate=${todayFilter}&endDate=${todayFilter}`, { headers });
             const dataToday = await resToday.json();
 
             // Fetch week
@@ -328,14 +334,14 @@ export const SectorDashboardModal: React.FC<SectorDashboardModalProps> = ({ isOp
                                                 className="w-full text-left px-4 py-3 hover:bg-slate-700 flex items-center gap-3 text-slate-200 font-medium border-b border-slate-700 transition-colors"
                                             >
                                                 <div className="bg-red-500/20 p-2 rounded-lg border border-red-500/30"><FileText className="w-4 h-4 text-red-400" /></div>
-                                                PDF Premium
+                                                PDF
                                             </button>
                                             <button 
                                                 onClick={() => handleExport('xlsx')}
                                                 className="w-full text-left px-4 py-3 hover:bg-slate-700 flex items-center gap-3 text-slate-200 font-medium border-b border-slate-700 transition-colors"
                                             >
                                                 <div className="bg-emerald-500/20 p-2 rounded-lg border border-emerald-500/30"><FileSpreadsheet className="w-4 h-4 text-emerald-400" /></div>
-                                                XLSX Inteligente
+                                                XLSX
                                             </button>
                                             <button 
                                                 onClick={handleScheduleEmail}

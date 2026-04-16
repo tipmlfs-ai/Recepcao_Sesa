@@ -1,3 +1,4 @@
+require('dotenv').config();
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
@@ -15,14 +16,14 @@ async function run() {
                 { isPriority: 'desc' },
                 { timestamp: 'asc' }
             ],
-            include: { citizen: true, sector: true }
+            include: { citizen: true },
+            take: 5
         });
 
-        console.log("Visits WAITING (Ordered by DB):");
+        console.log("WAITING VISITS:");
         for (const v of visits) {
-            console.log(`- ${v.citizen.name} | isPriority: ${v.isPriority} | timestamp: ${v.timestamp} | resourceId: ${v.resourceId} | sector: ${v.sector.name}`);
+            console.log(`Citizen: ${v.citizen.name} | isPriority: ${v.isPriority} | resId: ${v.resourceId} | timestamp: ${v.timestamp}`);
         }
-        
     } catch (e) {
         console.error(e);
     } finally {

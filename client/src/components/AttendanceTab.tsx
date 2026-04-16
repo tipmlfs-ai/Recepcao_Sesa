@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { type Sector } from '../types';
 import { Printer, UserPlus, AlertTriangle, Accessibility, User } from 'lucide-react';
 import { API_URL } from '../config/apiConfig';
@@ -13,6 +13,8 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ sectors }) => {
     const [name, setName] = useState('');
     const [phone, setPhone] = useState('');
     const [selectedSector, setSelectedSector] = useState('');
+    const [selectedResource, setSelectedResource] = useState<string | null>(null);
+    const [showResourceModal, setShowResourceModal] = useState(false);
     const [loading, setLoading] = useState(false);
     const [searchingCpf, setSearchingCpf] = useState(false);
     const [isPriority, setIsPriority] = useState(false);
@@ -158,9 +160,12 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ sectors }) => {
 
     const selectedSectorObj = sectors.find(s => s.id === selectedSector);
     const isAwayBlocked = selectedSectorObj?.status === 'AWAY';
+    const isSubmittingRef = useRef(false);
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleSubmit = async (e?: React.FormEvent, forceResourceId?: string | null) => {
+        if (e) e.preventDefault();
+        if (isSubmittingRef.current) return;
+        
         if (cpf.length < 14 || !name || !selectedSector) {
             toast.error('Preencha todos os campos corretamente.');
             return;
@@ -170,13 +175,21 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ sectors }) => {
             return;
         }
 
+        if (selectedSectorObj?.isHeterogeneous && forceResourceId === undefined && selectedResource === null) {
+            setShowResourceModal(true);
+            return;
+        }
+
+        const finalResourceId = forceResourceId !== undefined ? forceResourceId : selectedResource;
+
+        isSubmittingRef.current = true;
         setLoading(true);
         try {
             const token = localStorage.getItem('@RecepcaoSesa:token');
             const res = await fetch(`${API_URL}/api/visits`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                body: JSON.stringify({ cpf, name, phone, sectorId: selectedSector, isPriority })
+                body: JSON.stringify({ cpf, name, phone, sectorId: selectedSector, isPriority, resourceId: finalResourceId })
             });
 
             if (res.ok) {
@@ -197,6 +210,8 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ sectors }) => {
                 setName('');
                 setPhone('');
                 setSelectedSector('');
+                setSelectedResource(null);
+                setShowResourceModal(false);
                 setIsPriority(false);
             } else {
                 const err = await res.json();
@@ -204,8 +219,10 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ sectors }) => {
             }
         } catch (error) {
             toast.error('Erro de conexão');
+            isSubmittingRef.current = false;
         } finally {
             setLoading(false);
+            isSubmittingRef.current = false;
         }
     };
 
@@ -308,7 +325,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ sectors }) => {
                                 required
                             >
                                 <option value="" disabled>Selecione um Setor...</option>
-                                {sectors.map(s => (
+                                {sectors.filter(s => s.isVisibleOnPanel !== false).map(s => (
                                     <option key={s.id} value={s.id} disabled={s.status === 'AWAY'} className="text-white bg-slate-800">
                                         {s.name} — {s.status === 'AVAILABLE' ? '✅ Livre' : s.status === 'BUSY' ? '🔴 Ocupado' : '⚠️ Ausente (bloqueado)'}
                                     </option>
@@ -338,6 +355,51 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ sectors }) => {
                     </button>
                 </form>
             </div>
+
+            {/* MODAL FAST DISPATCH */}
+            {showResourceModal && selectedSectorObj && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+                    <div className="bg-slate-800 border border-slate-600 rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+                        <div className="p-8">
+                            <h3 className="text-2xl font-black text-white mb-2">Roteamento Rápido (Dispatch)</h3>
+                            <p className="text-slate-400 mb-6 font-medium">
+                                O setor <strong>{selectedSectorObj.name}</strong> utiliza subfilas. Escolha a mesa ou analista de destino, ou envie para a triagem geral.
+                            </p>
+                            
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[60vh] overflow-y-auto pr-2 pb-2">
+                                <button
+                                    type="button"
+                                    onClick={() => handleSubmit(undefined, null)}
+                                    className="bg-slate-700/50 border border-slate-600 hover:bg-indigo-600 hover:border-indigo-500 hover:shadow-lg p-5 rounded-2xl flex flex-col items-start gap-2 text-left transition-all duration-300 group relative overflow-hidden"
+                                >
+                                    <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                                    <span className="text-xl font-bold text-white group-hover:text-white relative z-10">Geral</span>
+                                    <span className="text-sm font-medium text-slate-400 group-hover:text-indigo-100 relative z-10">Triagem Documental ou Destino Desconhecido</span>
+                                </button>
+                                
+                                {selectedSectorObj.resources?.map(res => (
+                                    <button
+                                        key={res.id}
+                                        type="button"
+                                        onClick={() => handleSubmit(undefined, res.id)}
+                                        className="bg-slate-700/50 border border-slate-600 hover:bg-indigo-600 hover:border-indigo-500 hover:shadow-lg p-5 rounded-2xl flex flex-col items-start gap-2 text-left transition-all duration-300 group relative overflow-hidden"
+                                    >
+                                        <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                                        <span className="text-xl font-bold text-white group-hover:text-white relative z-10">{res.name}</span>
+                                        <span className="text-sm font-medium text-slate-400 group-hover:text-indigo-100 relative z-10">Atendimento Direto Específico</span>
+                                    </button>
+                                ))}
+                            </div>
+                            
+                            <div className="mt-8 flex justify-end">
+                                <button type="button" onClick={() => setShowResourceModal(false)} className="px-6 py-3 text-slate-300 hover:bg-slate-700/50 rounded-xl font-bold transition-colors">
+                                    Voltar e Editar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
