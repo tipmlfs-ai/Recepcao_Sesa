@@ -13,7 +13,7 @@ async function main() {
   try {
     await prisma.$executeRawUnsafe(`ALTER TABLE "Sector" ADD COLUMN "isVisibleOnPanel" BOOLEAN NOT NULL DEFAULT true;`);
     console.log('Column isVisibleOnPanel added.');
-  } catch (e) {
+  } catch (e: any) {
     if (e.message?.includes('already exists') || String(e).includes('already exists') || e.code === '42701') {
        console.log('Column isVisibleOnPanel already exists.');
     } else {
@@ -24,7 +24,7 @@ async function main() {
   try {
     await prisma.$executeRawUnsafe(`ALTER TABLE "Sector" ADD COLUMN "isHeterogeneous" BOOLEAN NOT NULL DEFAULT false;`);
     console.log('Column isHeterogeneous added.');
-  } catch (e) {
+  } catch (e: any) {
     if (e.message?.includes('already exists') || String(e).includes('already exists') || e.code === '42701') {
        console.log('Column isHeterogeneous already exists.');
     } else {

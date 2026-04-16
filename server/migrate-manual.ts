@@ -27,13 +27,13 @@ async function applyMigrations() {
     try {
         await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "Resource_name_sectorId_key" ON "Resource"("name", "sectorId");`);
         console.log('✔ Índice único em Resource garantido.');
-    } catch(e) {}
+    } catch(e: any) {}
 
     // 4. Criar FK para Sector
     try {
         await prisma.$executeRawUnsafe(`ALTER TABLE "Resource" ADD CONSTRAINT "Resource_sectorId_fkey" FOREIGN KEY ("sectorId") REFERENCES "Sector"("id") ON DELETE RESTRICT ON UPDATE CASCADE;`);
         console.log('✔ Foreign Key Resource -> Sector adicionada.');
-    } catch(e) {}
+    } catch(e: any) {}
 
     // 5. Adicionar recursoId em Visit
     await prisma.$executeRawUnsafe(`ALTER TABLE "Visit" ADD COLUMN IF NOT EXISTS "resourceId" TEXT;`);
@@ -43,7 +43,7 @@ async function applyMigrations() {
     try {
         await prisma.$executeRawUnsafe(`ALTER TABLE "Visit" ADD CONSTRAINT "Visit_resourceId_fkey" FOREIGN KEY ("resourceId") REFERENCES "Resource"("id") ON DELETE SET NULL ON UPDATE CASCADE;`);
         console.log('✔ Foreign Key Visit -> Resource adicionada.');
-    } catch(e) {}
+    } catch(e: any) {}
 
     console.log('🚀 Migração manual concluída com sucesso!');
 
