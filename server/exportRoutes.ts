@@ -223,10 +223,19 @@ router.get('/pdf', async (req, res) => {
 
         let tableRowsHtml = '';
         visits.forEach((v: any) => {
-            const adjustTZ = (d: any) => d ? new Date(new Date(d).getTime() - 3 * 60 * 60 * 1000) : null;
+            const formatBrasilia = (d: any) => {
+                if (!d) return '-';
+                try {
+                    return new Intl.DateTimeFormat('pt-BR', {
+                        day: '2-digit', month: '2-digit', year: 'numeric',
+                        hour: '2-digit', minute: '2-digit',
+                        timeZone: 'America/Sao_Paulo'
+                    }).format(new Date(d));
+                } catch (e) { return '-'; }
+            };
             
-            const displayEntry = v.timestamp ? format(adjustTZ(v.timestamp) as Date, 'dd/MM/yyyy HH:mm') : '-';
-            const displayExit = (v.finishedAt && v.ticketStatus !== 'NO_SHOW') ? format(adjustTZ(v.finishedAt) as Date, 'dd/MM/yyyy HH:mm') : '-';
+            const displayEntry = formatBrasilia(v.timestamp);
+            const displayExit = (v.ticketStatus === 'FINISHED' || v.ticketStatus === 'NO_SHOW') ? formatBrasilia(v.finishedAt || v.calledAt) : '-';
             
             tableRowsHtml += `
                 <tr>
@@ -417,8 +426,17 @@ router.get('/entry-logs/pdf', async (req, res) => {
 
         let tableRowsHtml = '';
         logs.forEach((log: any) => {
-            const adjustTZ = (d: any) => d ? new Date(new Date(d).getTime() - 3 * 60 * 60 * 1000) : null;
-            const displayEntry = log.timestamp ? format(adjustTZ(log.timestamp) as Date, 'dd/MM/yyyy HH:mm') : '-';
+            const formatBrasilia = (d: any) => {
+                if (!d) return '-';
+                try {
+                    return new Intl.DateTimeFormat('pt-BR', {
+                        day: '2-digit', month: '2-digit', year: 'numeric',
+                        hour: '2-digit', minute: '2-digit',
+                        timeZone: 'America/Sao_Paulo'
+                    }).format(new Date(d));
+                } catch (e) { return '-'; }
+            };
+            const displayEntry = formatBrasilia(log.timestamp);
             
             tableRowsHtml += `
                 <tr>
