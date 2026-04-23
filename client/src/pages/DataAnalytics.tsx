@@ -40,6 +40,7 @@ const DataAnalytics: React.FC = () => {
         const d = new Date();
         return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     });
+    const [isExporting, setIsExporting] = useState(false);
 
     useEffect(() => {
         fetchData();
@@ -224,7 +225,8 @@ const DataAnalytics: React.FC = () => {
     // Helper for PDF downloading
     const downloadPdf = async (url: string, filename: string) => {
         try {
-            toast.info("Gerando PDF do Caderno...", { id: 'export-loading' });
+            setIsExporting(true);
+            toast.info("Gerando PDF profissional... Isso pode levar alguns segundos.", { id: 'export-loading' });
             const res = await fetch(url, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
@@ -239,9 +241,11 @@ const DataAnalytics: React.FC = () => {
             a.click();
             a.remove();
             window.URL.revokeObjectURL(downloadUrl);
-            toast.success("PDF baixado com sucesso!", { id: 'export-loading' });
+            toast.success("PDF gerado e baixado!", { id: 'export-loading' });
         } catch (err) {
             toast.error("Erro ao exportar PDF", { id: 'export-loading' });
+        } finally {
+            setIsExporting(false);
         }
     };
 
@@ -357,15 +361,20 @@ const DataAnalytics: React.FC = () => {
 
                 <div className="flex flex-wrap items-center gap-3">
                     <button 
+                        disabled={isExporting}
                         onClick={() => downloadPdf(`${API_URL}/api/export/entry-logs/pdf?filterType=month&date=${new Date().toISOString()}`, `Caderno_Entrada_${new Date().getMonth() + 1}.pdf`)}
-                        className="bg-emerald-600 hover:bg-emerald-700 px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 text-sm text-white shadow-lg"
+                        className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-800/50 px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 text-sm text-white shadow-lg"
                     >
-                        <FileText className="w-4 h-4" /> Exportar Caderno (Mês)
+                        {isExporting ? (
+                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                        ) : <FileText className="w-4 h-4" />}
+                        {isExporting ? 'Gerando...' : 'Exportar Caderno (Mês)'}
                     </button>
                     
                     <button 
+                        disabled={isExporting}
                         onClick={() => setShowExportModal(true)}
-                        className="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 text-sm text-white shadow-lg"
+                        className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-800/50 px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 text-sm text-white shadow-lg"
                     >
                         <Download className="w-4 h-4" /> Exportar Atendimentos
                     </button>

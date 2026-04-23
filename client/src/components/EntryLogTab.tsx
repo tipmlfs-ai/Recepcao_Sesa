@@ -34,6 +34,7 @@ export const EntryLogTab: React.FC<EntryLogTabProps> = ({ sectors }) => {
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
+    const [exporting, setExporting] = useState(false);
 
     const formatCpf = (val: string) => {
         return val.replace(/\D/g, '')
@@ -157,6 +158,7 @@ export const EntryLogTab: React.FC<EntryLogTabProps> = ({ sectors }) => {
 
     const handleExportPDF = async () => {
         try {
+            setExporting(true);
             const token = localStorage.getItem('@RecepcaoSesa:token');
             let url = `${API_URL}/api/export/entry-logs/pdf?`;
             
@@ -200,6 +202,8 @@ export const EntryLogTab: React.FC<EntryLogTabProps> = ({ sectors }) => {
         } catch (error) {
             console.error('Error exporting PDF:', error);
             toast.error('Erro ao exportar PDF.', { id: 'pdf-toast' });
+        } finally {
+            setExporting(false);
         }
     };
 
@@ -275,7 +279,7 @@ export const EntryLogTab: React.FC<EntryLogTabProps> = ({ sectors }) => {
                                 required
                             >
                                 <option value="" disabled>Selecione um Setor...</option>
-                                {sectors.map(s => (
+                                {sectors.filter(s => s.isVisibleInEntryLog !== false).map(s => (
                                     <option key={s.id} value={s.id} className="bg-slate-800 text-white">
                                         {s.name}
                                     </option>
@@ -350,10 +354,13 @@ export const EntryLogTab: React.FC<EntryLogTabProps> = ({ sectors }) => {
 
                         <button 
                             onClick={handleExportPDF}
-                            className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors border border-slate-600"
+                            disabled={exporting}
+                            className="bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors border border-slate-600"
                         >
-                            <Download className="w-4 h-4" />
-                            Exportar PDF
+                            {exporting ? (
+                                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                            ) : <Download className="w-4 h-4" />}
+                            {exporting ? 'Gerando...' : 'Exportar PDF'}
                         </button>
                     </div>
                 </div>
