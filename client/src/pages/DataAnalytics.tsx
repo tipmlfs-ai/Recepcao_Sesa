@@ -208,19 +208,7 @@ const DataAnalytics: React.FC = () => {
         toast.info("A funcionalidade de agendamento por e-mail está em prévia e será lançada na próxima versão.");
     };
 
-    const handleExportEntryLog = async () => {
-        try {
-            const res = await fetch(`${API_URL}/api/export/entry-logs/pdf?filterType=month&date=${new Date().toISOString()}`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (res.ok) {
-                const blob = await res.json(); // Wait, entry-logs/pdf returns a blob (PDF)
-                // Actually the fetch for PDF should be handled as blob
-            }
-        } catch (error) {
-            console.error(error);
-        }
-    };
+
 
     // Helper for PDF downloading
     const downloadPdf = async (url: string, filename: string) => {
