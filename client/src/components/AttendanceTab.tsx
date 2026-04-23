@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { type Sector } from '../types';
-import { Printer, UserPlus, AlertTriangle, Accessibility, User } from 'lucide-react';
+import { Printer, UserPlus, AlertTriangle, Accessibility, User, CheckCheck } from 'lucide-react';
 import { API_URL } from '../config/apiConfig';
 import { toast } from 'sonner';
 
