@@ -19,6 +19,7 @@ interface Sector {
     waitingRoomCapacity: number;
     isHeterogeneous?: boolean;
     isVisibleOnPanel?: boolean;
+    isVisibleInEntryLog?: boolean;
     resources?: Resource[];
 }
 
@@ -57,7 +58,7 @@ const Admin: React.FC = () => {
     const [newUserPassword, setNewUserPassword] = useState('');
 
     // Sector Management State
-    const [activeTab, setActiveTab] = useState<'users' | 'sectors'>('users');
+    const [activeTab, setActiveTab] = useState<'users' | 'sectors' | 'entrylog'>('users');
     const [editingSector, setEditingSector] = useState<Sector | null>(null);
     const [editSectorName, setEditSectorName] = useState('');
     const [editCallCooldown, setEditCallCooldown] = useState(120);
@@ -65,8 +66,13 @@ const Admin: React.FC = () => {
     const [editWaitingRoomCapacity, setEditWaitingRoomCapacity] = useState(5);
     const [editIsHeterogeneous, setEditIsHeterogeneous] = useState(false);
     const [editIsVisibleOnPanel, setEditIsVisibleOnPanel] = useState(true);
+    const [editIsVisibleInEntryLog, setEditIsVisibleInEntryLog] = useState(true);
     const [editResources, setEditResources] = useState<Resource[]>([]);
     const [newResourceName, setNewResourceName] = useState('');
+
+    // New Sector State
+    const [isCreatingSector, setIsCreatingSector] = useState(false);
+    const [newSectorName, setNewSectorName] = useState('');
 
     useEffect(() => {
         fetchData();
@@ -181,6 +187,38 @@ const Admin: React.FC = () => {
         }
     };
 
+    const handleCreateSector = async (e: React.FormEvent) => {
+        e.preventDefault();
+        try {
+            const res = await fetch(`${API_URL}/api/sectors`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({
+                    name: newSectorName,
+                    callCooldown: 120,
+                    hasWaitingRoom: false,
+                    waitingRoomCapacity: 5,
+                    isHeterogeneous: false,
+                    isVisibleOnPanel: true,
+                    isVisibleInEntryLog: true
+                })
+            });
+
+            if (res.ok) {
+                const created = await res.json();
+                setSectors([...sectors, created]);
+                setIsCreatingSector(false);
+                setNewSectorName('');
+                alert('Setor criado com sucesso!');
+            } else {
+                const err = await res.json();
+                alert(err.error || 'Erro ao criar setor');
+            }
+        } catch (error) {
+            alert('Erro de conexão ao criar setor');
+        }
+    };
+
     const handleUpdateSector = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!editingSector) return;
@@ -195,7 +233,8 @@ const Admin: React.FC = () => {
                     hasWaitingRoom: editHasWaitingRoom,
                     waitingRoomCapacity: editWaitingRoomCapacity,
                     isHeterogeneous: editIsHeterogeneous,
-                    isVisibleOnPanel: editIsVisibleOnPanel
+                    isVisibleOnPanel: editIsVisibleOnPanel,
+                    isVisibleInEntryLog: editIsVisibleInEntryLog
                 })
             });
 
@@ -284,13 +323,24 @@ const Admin: React.FC = () => {
                         >
                             Setores
                         </button>
+                        <button 
+                            onClick={() => setActiveTab('entrylog')}
+                            className={`px-4 py-2 rounded-md font-medium text-sm transition-all ${activeTab === 'entrylog' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+                        >
+                            Caderno
+                        </button>
                     </div>
                     <button onClick={() => navigate('/admin/analytics')} className="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 text-sm text-white">
-                        <BarChart3 className="w-4 h-4" /> Data Analytics
+                        <BarChart3 className="w-4 h-4" /> Analytics
                     </button>
-                    <button onClick={() => setIsCreating(true)} className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 text-sm text-white">
-                        <Plus className="w-4 h-4" /> Novo Usuário
-                    </button>
+                    <div className="flex gap-2">
+                        <button onClick={() => { setIsCreating(true); setIsCreatingSector(false); setActiveTab('users'); }} className="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 text-xs text-white">
+                            <Plus className="w-4 h-4" /> Novo Usuário
+                        </button>
+                        <button onClick={() => { setIsCreatingSector(true); setIsCreating(false); setActiveTab('sectors'); }} className="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 text-xs text-white">
+                            <Plus className="w-4 h-4" /> Novo Setor
+                        </button>
+                    </div>
                     <button onClick={handleLogout} className="flex items-center gap-2 hover:text-red-400 font-medium transition-colors text-white">
                         Sair <LogOut className="w-5 h-5" />
                     </button>
@@ -348,6 +398,25 @@ const Admin: React.FC = () => {
                                 <div className="md:col-span-2 flex justify-end gap-3 mt-4">
                                     <button type="button" onClick={() => setIsCreating(false)} className="px-5 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium">Cancelar</button>
                                     <button type="submit" className="px-5 py-2 bg-slate-900 text-white hover:bg-slate-800 rounded-lg font-medium">Salvar Usuário</button>
+                                </div>
+                            </form>
+                        </div>
+                    )}
+
+                    {isCreatingSector && (
+                        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 mb-6">
+                            <h2 className="text-lg font-bold text-slate-800 mb-4">Adicionar Novo Setor</h2>
+                            <form onSubmit={handleCreateSector} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="md:col-span-2">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Nome do Setor</label>
+                                    <input
+                                        type="text" required value={newSectorName} onChange={e => setNewSectorName(e.target.value)}
+                                        className={theInputStyle} placeholder="Ex: Protocolo, Recursos Humanos..."
+                                    />
+                                </div>
+                                <div className="md:col-span-2 flex justify-end gap-3 mt-4">
+                                    <button type="button" onClick={() => setIsCreatingSector(false)} className="px-5 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium">Cancelar</button>
+                                    <button type="submit" className="px-5 py-2 bg-slate-900 text-white hover:bg-slate-800 rounded-lg font-medium">Criar Setor</button>
                                 </div>
                             </form>
                         </div>
@@ -414,7 +483,7 @@ const Admin: React.FC = () => {
                                 </div>
                             )}
                         </div>
-                    ) : (
+                    ) : activeTab === 'sectors' ? (
                         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                             <table className="w-full text-left">
                                 <thead className="bg-slate-50 border-b border-slate-200">
@@ -447,6 +516,7 @@ const Admin: React.FC = () => {
                                                         setEditWaitingRoomCapacity(s.waitingRoomCapacity || 5);
                                                         setEditIsHeterogeneous(s.isHeterogeneous || false);
                                                         setEditIsVisibleOnPanel(s.isVisibleOnPanel ?? true);
+                                                        setEditIsVisibleInEntryLog(s.isVisibleInEntryLog ?? true);
                                                         setEditResources(s.resources || []);
                                                     }}
                                                     className="px-4 py-2 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white rounded-lg transition-all font-bold text-sm"
@@ -458,6 +528,59 @@ const Admin: React.FC = () => {
                                     ))}
                                 </tbody>
                             </table>
+                        </div>
+                    ) : (
+                        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden p-6">
+                            <h2 className="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2">
+                                <Users className="w-6 h-6 text-emerald-600" />
+                                Gestão do Caderno de Entrada
+                            </h2>
+                            <p className="text-slate-600 mb-6 text-sm">
+                                Configure quais setores aparecem na aba "Caderno de Entrada" da recepção e gerencie os registros.
+                            </p>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+                                {sectors.map(s => (
+                                    <div key={s.id} className="flex items-center justify-between p-4 bg-slate-50 border border-slate-200 rounded-xl hover:shadow-md transition-shadow">
+                                        <div className="flex flex-col">
+                                            <span className="font-bold text-slate-800">{s.name}</span>
+                                            <span className={`text-[10px] font-bold uppercase ${s.isVisibleInEntryLog ? 'text-emerald-600' : 'text-slate-400'}`}>
+                                                {s.isVisibleInEntryLog ? 'Visível no Caderno' : 'Oculto no Caderno'}
+                                            </span>
+                                        </div>
+                                        <label className="relative inline-flex items-center cursor-pointer">
+                                            <input 
+                                                type="checkbox" 
+                                                className="sr-only peer" 
+                                                checked={s.isVisibleInEntryLog ?? true} 
+                                                onChange={async (e) => {
+                                                    const checked = e.target.checked;
+                                                    try {
+                                                        const res = await fetch(`${API_URL}/api/sectors/${s.id}`, {
+                                                            method: 'PATCH',
+                                                            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                                                            body: JSON.stringify({ isVisibleInEntryLog: checked })
+                                                        });
+                                                        if (res.ok) {
+                                                            setSectors(sectors.map(sec => sec.id === s.id ? { ...sec, isVisibleInEntryLog: checked } : sec));
+                                                        }
+                                                    } catch (err) {
+                                                        console.error(err);
+                                                    }
+                                                }}
+                                            />
+                                            <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                                        </label>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="border-t border-slate-100 pt-8">
+                                <h3 className="text-lg font-bold text-slate-800 mb-4">Relatório do Caderno</h3>
+                                <p className="text-slate-500 text-sm mb-4 italic">
+                                    Para gerar relatórios e exportar PDFs do Caderno de Entrada, utilize a aba "Data Analytics" clicando no botão acima, ou acesse a aba "Caderno de Entrada" na recepção.
+                                </p>
+                            </div>
                         </div>
                     )}
                 </div>
@@ -588,6 +711,19 @@ const Admin: React.FC = () => {
                                             <label className="relative inline-flex items-center cursor-pointer">
                                                 <input type="checkbox" className="sr-only peer" checked={editIsVisibleOnPanel} onChange={e => setEditIsVisibleOnPanel(e.target.checked)} />
                                                 <div className="w-11 h-6 bg-slate-300 border border-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:border-slate-400 after:border after:rounded-full after:h-5 after:w-5 after:transition-all after:shadow-md peer-checked:bg-green-600"></div>
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    <div className="pt-4 border-t border-slate-100">
+                                        <div className="flex items-center justify-between mb-4">
+                                            <div>
+                                                <label className="block text-sm font-bold text-slate-700">Caderno de Entrada</label>
+                                                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter">Exibir este setor na aba de registro manual (Caderno)</p>
+                                            </div>
+                                            <label className="relative inline-flex items-center cursor-pointer">
+                                                <input type="checkbox" className="sr-only peer" checked={editIsVisibleInEntryLog} onChange={e => setEditIsVisibleInEntryLog(e.target.checked)} />
+                                                <div className="w-11 h-6 bg-slate-300 border border-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:border-slate-400 after:border after:rounded-full after:h-5 after:w-5 after:transition-all after:shadow-md peer-checked:bg-emerald-600"></div>
                                             </label>
                                         </div>
                                     </div>
