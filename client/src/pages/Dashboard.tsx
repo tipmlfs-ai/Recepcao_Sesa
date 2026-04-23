@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useRealTimeStatus } from '../useRealTimeStatus';
 import { type Sector } from '../types';
-import { Unlock, Lock, LogOut, Search, Users, LayoutDashboard, UserCheck } from 'lucide-react';
+import { Unlock, Lock, LogOut, Search, Users, LayoutDashboard, UserCheck, Bell, CheckCheck, FileText } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../config/supabaseConfig';
 import AttendanceTab from '../components/AttendanceTab';
@@ -10,7 +10,7 @@ import HistoryTab from '../components/HistoryTab';
 import CallFlowTab from '../components/CallFlowTab';
 import CallsTab from '../components/CallsTab';
 import CallNotificationCard from '../components/CallNotificationCard';
-import { Bell, CheckCheck } from 'lucide-react';
+import EntryLogTab from '../components/EntryLogTab';
 
 const SectorCard = ({ sector }: { sector: Sector }) => {
     const getStatusConfig = (status: Sector['status']) => {
@@ -174,7 +174,7 @@ const Dashboard: React.FC = () => {
     const { logout } = useAuth();
     const navigate = useNavigate();
 
-    const [activeTab, setActiveTab] = useState<'attendance' | 'panel' | 'history' | 'flow' | 'calls'>('attendance');
+    const [activeTab, setActiveTab] = useState<'attendance' | 'panel' | 'history' | 'flow' | 'calls' | 'entrylog'>('attendance');
     const [hasNewCall, setHasNewCall] = useState(false);
 
     const handleLogout = () => {
@@ -254,6 +254,12 @@ const Dashboard: React.FC = () => {
                         <UserCheck className="w-4 h-4" /> Atendimento
                     </button>
                     <button
+                        onClick={() => handleTabChange('entrylog')}
+                        className={`flex items-center gap-2.5 px-6 py-3 rounded-xl text-sm font-bold transition-all duration-300 ${activeTab === 'entrylog' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30 scale-105' : 'text-slate-400 hover:text-white hover:bg-slate-700/50'}`}
+                    >
+                        <FileText className="w-4 h-4" /> Caderno de Entrada
+                    </button>
+                    <button
                         onClick={() => handleTabChange('panel')}
                         className={`flex items-center gap-2.5 px-6 py-3 rounded-xl text-sm font-bold transition-all duration-300 ${activeTab === 'panel' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30 scale-105' : 'text-slate-400 hover:text-white hover:bg-slate-700/50'}`}
                     >
@@ -289,6 +295,7 @@ const Dashboard: React.FC = () => {
                 {/* TAB CONTENT */}
                 <div className="transition-all">
                     {activeTab === 'attendance' && <AttendanceTab sectors={sectors} />}
+                    {activeTab === 'entrylog' && <EntryLogTab sectors={sectors} />}
                     {activeTab === 'panel' && <PanelTab sectors={sectors} />}
                     {activeTab === 'calls' && <CallsTab />}
                     {activeTab === 'flow' && <CallFlowTab />}

@@ -44,6 +44,7 @@ model Sector {
   resources           Resource[]
   user                User?
   visits              Visit[]
+  entryLogs           EntryLog[]
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 }
@@ -86,4 +87,14 @@ model Visit {
   calledAt              DateTime? 
   finishedAt            DateTime? 
   timestamp             DateTime @default(now())
+}
+
+model EntryLog {
+  id        String   @id @default(uuid())
+  cpf       String
+  name      String
+  phone     String?
+  sectorId  String
+  sector    Sector   @relation(fields: [sectorId], references: [id])
+  timestamp DateTime @default(now())
 }

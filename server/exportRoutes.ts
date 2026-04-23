@@ -5,7 +5,14 @@ const PdfPrinter = require('pdfmake');
 import { format } from 'date-fns';
 
 const router = Router();
-const prisma = new PrismaClient();
+const dbUrl = process.env.DATABASE_URL || '';
+const prisma = new PrismaClient({
+    datasources: {
+        db: {
+            url: dbUrl.includes('pool_timeout') ? dbUrl : `${dbUrl}&pool_timeout=60`
+        }
+    }
+});
 
 function translateStatus(status: string | null | undefined): string {
     if (!status) return 'Indisponível';
@@ -340,6 +347,173 @@ router.get('/pdf', async (req, res) => {
                 error: 'Falha interna ao exportar PDF via Puppeteer Serverless', 
                 message: process.env.NODE_ENV === 'development' ? error.stack : error.message 
             });
+        }
+    } finally {
+        if (browser !== null) {
+            await browser.close().catch(console.error);
+        }
+    }
+});
+
+// --- PDF Export for Entry Logs (Caderno de Entrada) ---
+router.get('/entry-logs/pdf', async (req, res) => {
+    let browser = null;
+    try {
+        const { date, filterType, startDate, endDate, sectorId, cpf } = req.query;
+
+        let queryOptions: any = {
+            include: { sector: true },
+            orderBy: { timestamp: 'desc' },
+            where: {}
+        };
+
+        if (sectorId) queryOptions.where.sectorId = sectorId as string;
+        if (cpf) queryOptions.where.cpf = { contains: cpf as string };
+
+        if (filterType) {
+            let sDate: Date;
+            let eDate: Date;
+
+            if (filterType === 'custom') {
+                if (startDate && endDate) {
+                    sDate = new Date((startDate as string) + 'T00:00:00-03:00');
+                    eDate = new Date((endDate as string) + 'T23:59:59.999-03:00');
+                } else {
+                    sDate = new Date(); sDate.setHours(0, 0, 0, 0);
+                    eDate = new Date(); eDate.setHours(23, 59, 59, 999);
+                }
+            } else {
+                const targetDate = date ? new Date(date as string) : new Date();
+                sDate = new Date(targetDate); eDate = new Date(targetDate);
+
+                if (filterType === 'day') {
+                    sDate.setHours(0, 0, 0, 0); eDate.setHours(23, 59, 59, 999);
+                } else if (filterType === 'week') {
+                    const day = sDate.getDay();
+                    sDate.setDate(sDate.getDate() - day); sDate.setHours(0, 0, 0, 0);
+                    eDate.setDate(eDate.getDate() + (6 - day)); eDate.setHours(23, 59, 59, 999);
+                } else if (filterType === 'month') {
+                    sDate.setDate(1); sDate.setHours(0, 0, 0, 0);
+                    eDate.setMonth(eDate.getMonth() + 1); eDate.setDate(0); eDate.setHours(23, 59, 59, 999);
+                }
+            }
+            queryOptions.where.timestamp = { gte: sDate, lte: eDate };
+        } else if (!cpf) {
+            const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+            const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
+            queryOptions.where.timestamp = { gte: todayStart, lte: todayEnd };
+        }
+
+        const logs = await prisma.entryLog.findMany(queryOptions);
+
+        if (!logs || logs.length === 0) {
+            return res.status(404).json({ error: 'Nenhum registro encontrado para exportar.' });
+        }
+
+        let tableRowsHtml = '';
+        logs.forEach((log: any) => {
+            const adjustTZ = (d: any) => d ? new Date(new Date(d).getTime() - 3 * 60 * 60 * 1000) : null;
+            const displayEntry = log.timestamp ? format(adjustTZ(log.timestamp) as Date, 'dd/MM/yyyy HH:mm') : '-';
+            
+            tableRowsHtml += `
+                <tr>
+                    <td>${displayEntry}</td>
+                    <td>${log.name}</td>
+                    <td>${log.cpf}</td>
+                    <td>${log.phone || '-'}</td>
+                    <td>${log.sector?.name || 'Geral'}</td>
+                </tr>
+            `;
+        });
+
+        const htmlContent = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <style>
+                body { font-family: Helvetica, Arial, sans-serif; color: #0f172a; margin: 0; padding: 0; font-size: 12px; }
+                .header { display: flex; justify-content: space-between; border-bottom: 2px solid #10b981; padding-bottom: 10px; margin-bottom: 20px; }
+                .title { font-size: 20px; font-weight: bold; color: #064e3b; }
+                .subtitle { font-size: 14px; color: #047857; margin-top: 5px; text-align: right; }
+                table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+                th { background: #064e3b; color: white; padding: 10px; text-align: left; font-size: 11px; }
+                td { padding: 8px 10px; border-bottom: 1px solid #d1fae5; font-size: 10px; }
+                tr:nth-child(even) { background-color: #f0fdf4; }
+                .total-card { margin-bottom: 20px; font-size: 14px; font-weight: bold; color: #064e3b; }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <div class="title">Recepção SESA - Caderno de Entrada</div>
+                <div class="subtitle">Relatório de Registros</div>
+            </div>
+
+            <div class="total-card">Total de Registros no Período: ${logs.length}</div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Horário de Entrada</th>
+                        <th>Cidadão</th>
+                        <th>CPF</th>
+                        <th>Telefone</th>
+                        <th>Setor de Destino</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${tableRowsHtml}
+                </tbody>
+            </table>
+        </body>
+        </html>
+        `;
+
+        const chromium = require('@sparticuz/chromium');
+        const puppeteer = require('puppeteer-core');
+
+        const executablePath = process.env.VERCEL ? await chromium.executablePath() : 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+
+        browser = await puppeteer.launch({
+            args: chromium.args,
+            defaultViewport: chromium.defaultViewport,
+            executablePath: executablePath,
+            headless: chromium.headless,
+            ignoreHTTPSErrors: true,
+        });
+
+        const page = await browser.newPage();
+        await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+
+        let footerDate = '';
+        try { footerDate = format(new Date(), 'dd/MM/yyyy HH:mm'); } catch (e) { footerDate = 'Data Indisponível'; }
+
+        const pdfBuffer = await page.pdf({
+            format: 'A4',
+            landscape: false,
+            printBackground: true,
+            margin: { top: '40px', right: '40px', bottom: '60px', left: '40px' },
+            displayHeaderFooter: true,
+            headerTemplate: '<div></div>',
+            footerTemplate: `
+                <div style="width: 100%; font-size: 8px; color: #047857; padding: 0 40px; display: flex; justify-content: space-between; font-family: Helvetica, Arial, sans-serif;">
+                    <span>Gerado em: ${footerDate}</span>
+                    <span>Página <span class="pageNumber"></span> de <span class="totalPages"></span></span>
+                </div>
+            `
+        });
+
+        let fileDate = '';
+        try { fileDate = format(new Date(), 'yyyyMMdd'); } catch(e) { fileDate = 'Export'; }
+        
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename=CadernoEntrada_${fileDate}.pdf`);
+        res.end(pdfBuffer);
+
+    } catch (error: any) {
+        console.error('[PDF Export EntryLog - FATAL]', error);
+        if (!res.headersSent) {
+            res.status(500).json({ error: 'Falha ao exportar PDF' });
         }
     } finally {
         if (browser !== null) {

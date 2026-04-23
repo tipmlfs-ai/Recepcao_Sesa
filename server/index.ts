@@ -7,11 +7,15 @@ import exportRoutes from './exportRoutes';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key-change-in-production';
 const app = express();
-const prisma = new PrismaClient();
-const PORT = process.env.PORT || 3001;
-
-// --- DATABASE URL SAFETY CHECK ---
 const dbUrl = process.env.DATABASE_URL || '';
+const PORT = process.env.PORT || 3001;
+const prisma = new PrismaClient({
+    datasources: {
+        db: {
+            url: dbUrl.includes('pool_timeout') ? dbUrl : `${dbUrl}&pool_timeout=60`
+        }
+    }
+});
 if (dbUrl.includes(':6543') && !dbUrl.includes('pgbouncer=true')) {
     console.error(' [CRÍTICO] DATABASE_URL está usando a porta do pooler (6543) mas está faltando "?pgbouncer=true".');
     console.warn(' Isso causará erros de "prepared statement already exists" (42P05) em produção.');
@@ -484,6 +488,124 @@ app.get('/api/visits', authenticateToken, async (req, res) => {
             details: error.message,
             hint: 'Provavelmente existem registros antigos com a coluna "code" vazia (NULL) no banco de dados. Rode o script de limpeza no SQL Editor do Supabase.'
         });
+    }
+});
+
+// --- CITIZENS ROUTES --- //
+app.get('/api/citizens/:cpf', authenticateToken, async (req, res) => {
+    try {
+        const cpf = req.params.cpf;
+        const citizen = await prisma.citizen.findUnique({
+            where: { cpf }
+        });
+        if (!citizen) return res.status(404).json({ error: 'Cidadão não encontrado' });
+        res.json(citizen);
+    } catch (error) {
+        console.error('Error fetching citizen:', error);
+        res.status(500).json({ error: 'Erro ao buscar cidadão' });
+    }
+});
+
+// --- ENTRY LOG (CADERNO DE ENTRADA) ROUTES --- //
+
+app.post('/api/entry-logs', authenticateToken, async (req, res) => {
+    try {
+        const { cpf, name, phone, sectorId } = req.body;
+        
+        // As requested by the user, if the citizen doesn't exist, we create them
+        // to populate the phone book for future use.
+        const citizen = await prisma.citizen.upsert({
+            where: { cpf },
+            update: { name, phone },
+            create: { cpf, name, phone }
+        });
+
+        const entryLog = await prisma.entryLog.create({
+            data: {
+                cpf: citizen.cpf,
+                name: citizen.name,
+                phone: citizen.phone,
+                sectorId
+            },
+            include: { sector: true }
+        });
+
+        res.status(201).json(entryLog);
+    } catch (error) {
+        console.error('Error creating entry log:', error);
+        res.status(500).json({ error: 'Failed to create entry log' });
+    }
+});
+
+app.get('/api/entry-logs', authenticateToken, async (req, res) => {
+    try {
+        const { date, filterType, startDate, endDate, sectorId, cpf } = req.query;
+
+        let queryOptions: any = {
+            include: { sector: true },
+            orderBy: { timestamp: 'desc' },
+            where: {}
+        };
+
+        if (sectorId) {
+            queryOptions.where.sectorId = sectorId as string;
+        }
+
+        if (cpf) {
+            queryOptions.where.cpf = { contains: cpf as string };
+        }
+
+        if (filterType) {
+            let sDate: Date;
+            let eDate: Date;
+
+            if (filterType === 'custom') {
+                if (startDate && endDate) {
+                    sDate = new Date((startDate as string) + 'T00:00:00-03:00');
+                    eDate = new Date((endDate as string) + 'T23:59:59.999-03:00');
+                } else {
+                    sDate = new Date();
+                    sDate.setHours(0, 0, 0, 0);
+                    eDate = new Date();
+                    eDate.setHours(23, 59, 59, 999);
+                }
+            } else {
+                const targetDate = date ? new Date(date as string) : new Date();
+                sDate = new Date(targetDate);
+                eDate = new Date(targetDate);
+
+                if (filterType === 'day') {
+                    sDate.setHours(0, 0, 0, 0);
+                    eDate.setHours(23, 59, 59, 999);
+                } else if (filterType === 'week') {
+                    const day = sDate.getDay();
+                    sDate.setDate(sDate.getDate() - day);
+                    sDate.setHours(0, 0, 0, 0);
+                    eDate.setDate(eDate.getDate() + (6 - day));
+                    eDate.setHours(23, 59, 59, 999);
+                } else if (filterType === 'month') {
+                    sDate.setDate(1);
+                    sDate.setHours(0, 0, 0, 0);
+                    eDate.setMonth(eDate.getMonth() + 1);
+                    eDate.setDate(0);
+                    eDate.setHours(23, 59, 59, 999);
+                }
+            }
+            queryOptions.where.timestamp = { gte: sDate, lte: eDate };
+        } else if (!cpf) {
+            // Default to today if no specific filter
+            const todayStart = new Date();
+            todayStart.setHours(0, 0, 0, 0);
+            const todayEnd = new Date();
+            todayEnd.setHours(23, 59, 59, 999);
+            queryOptions.where.timestamp = { gte: todayStart, lte: todayEnd };
+        }
+
+        const logs = await prisma.entryLog.findMany(queryOptions);
+        res.json(logs);
+    } catch (error) {
+        console.error('Error fetching entry logs:', error);
+        res.status(500).json({ error: 'Failed to fetch entry logs' });
     }
 });
 
