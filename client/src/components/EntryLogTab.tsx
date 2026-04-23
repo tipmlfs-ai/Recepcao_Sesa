@@ -36,6 +36,23 @@ export const EntryLogTab: React.FC<EntryLogTabProps> = ({ sectors }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [exporting, setExporting] = useState(false);
 
+    const validateCpf = (val: string) => {
+        const cleanCpf = val.replace(/\D/g, '');
+        if (cleanCpf.length !== 11) return false;
+        if (/^(\d)\1{10}$/.test(cleanCpf)) return false;
+        let sum = 0, remainder;
+        for (let i = 1; i <= 9; i++) sum = sum + parseInt(cleanCpf.substring(i - 1, i)) * (11 - i);
+        remainder = (sum * 10) % 11;
+        if (remainder === 10 || remainder === 11) remainder = 0;
+        if (remainder !== parseInt(cleanCpf.substring(9, 10))) return false;
+        sum = 0;
+        for (let i = 1; i <= 10; i++) sum = sum + parseInt(cleanCpf.substring(i - 1, i)) * (12 - i);
+        remainder = (sum * 10) % 11;
+        if (remainder === 10 || remainder === 11) remainder = 0;
+        if (remainder !== parseInt(cleanCpf.substring(10, 11))) return false;
+        return true;
+    };
+
     const formatCpf = (val: string) => {
         return val.replace(/\D/g, '')
             .replace(/(\d{3})(\d)/, '$1.$2')
@@ -125,7 +142,11 @@ export const EntryLogTab: React.FC<EntryLogTabProps> = ({ sectors }) => {
         e.preventDefault();
         
         if (cpf.length < 14 || !name || !selectedSector) {
-            toast.error('Preencha os campos obrigatórios (CPF, Nome, Setor).');
+            toast.error('Preencha CPF, Nome e Setor.');
+            return;
+        }
+        if (!validateCpf(cpf)) {
+            toast.error('CPF inválido. Verifique os números.');
             return;
         }
 
@@ -237,9 +258,12 @@ export const EntryLogTab: React.FC<EntryLogTabProps> = ({ sectors }) => {
                                     onChange={handleCpfChange}
                                     placeholder="000.000.000-00"
                                     maxLength={14}
-                                    className="w-full bg-slate-900/50 border border-slate-700 text-white rounded-xl px-4 py-3 focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 outline-none transition-all placeholder:text-slate-600 font-medium font-mono shadow-inner group-hover:border-slate-600"
+                                    className={`w-full bg-slate-900/50 border ${cpf.length === 14 && !validateCpf(cpf) ? 'border-rose-500 ring-1 ring-rose-500/30' : 'border-slate-700'} text-white rounded-xl px-4 py-3 focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 outline-none transition-all placeholder:text-slate-600 font-medium font-mono shadow-inner group-hover:border-slate-600`}
                                     required
                                 />
+                                {cpf.length === 14 && !validateCpf(cpf) && (
+                                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-rose-400 text-[10px] font-bold bg-rose-500/10 px-1.5 py-0.5 rounded border border-rose-500/20">Inválido</div>
+                                )}
                                 {searchingCpf && (
                                     <div className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-400 text-xs font-bold animate-pulse">Buscando...</div>
                                 )}

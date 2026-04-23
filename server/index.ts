@@ -97,6 +97,23 @@ app.use(async (req, res, next) => {
     next();
 });
 
+function validateCpf(val: string) {
+    const cleanCpf = val.replace(/\D/g, '');
+    if (cleanCpf.length !== 11) return false;
+    if (/^(\d)\1{10}$/.test(cleanCpf)) return false;
+    let sum = 0, remainder;
+    for (let i = 1; i <= 9; i++) sum = sum + parseInt(cleanCpf.substring(i - 1, i)) * (11 - i);
+    remainder = (sum * 10) % 11;
+    if (remainder === 10 || remainder === 11) remainder = 0;
+    if (remainder !== parseInt(cleanCpf.substring(9, 10))) return false;
+    sum = 0;
+    for (let i = 1; i <= 10; i++) sum = sum + parseInt(cleanCpf.substring(i - 1, i)) * (12 - i);
+    remainder = (sum * 10) % 11;
+    if (remainder === 10 || remainder === 11) remainder = 0;
+    if (remainder !== parseInt(cleanCpf.substring(10, 11))) return false;
+    return true;
+}
+
 // Polyfill for globalThis in older node versions if needed, but modern node (Vercel) supports it.
 declare global {
     var lastResetDateStr: string;
@@ -330,6 +347,12 @@ app.get('/api/citizens/:cpf', authenticateToken, async (req, res) => {
 app.post('/api/visits', authenticateToken, async (req, res) => {
     try {
         const { cpf, name, phone, sectorId, isPriority, resourceId } = req.body;
+        if (!cpf || !name || !sectorId) return res.status(400).json({ error: 'Faltam dados obrigatórios' });
+
+        if (!validateCpf(cpf)) {
+            return res.status(400).json({ error: 'CPF inválido. Verifique os números digitados.' });
+        }
+
         const userId = (req as any).user.id;
 
         // Verify sector is not AWAY
@@ -511,7 +534,12 @@ app.get('/api/citizens/:cpf', authenticateToken, async (req, res) => {
 app.post('/api/entry-logs', authenticateToken, async (req, res) => {
     try {
         const { cpf, name, phone, sectorId } = req.body;
-        
+        if (!cpf || !name || !sectorId) return res.status(400).json({ error: 'Faltam dados' });
+
+        if (!validateCpf(cpf)) {
+            return res.status(400).json({ error: 'CPF inválido' });
+        }
+
         // As requested by the user, if the citizen doesn't exist, we create them
         // to populate the phone book for future use.
         const citizen = await prisma.citizen.upsert({
