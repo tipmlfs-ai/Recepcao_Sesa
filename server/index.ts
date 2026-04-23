@@ -494,7 +494,7 @@ app.get('/api/visits', authenticateToken, async (req, res) => {
 // --- CITIZENS ROUTES --- //
 app.get('/api/citizens/:cpf', authenticateToken, async (req, res) => {
     try {
-        const cpf = req.params.cpf;
+        const cpf = req.params.cpf as string;
         const citizen = await prisma.citizen.findUnique({
             where: { cpf }
         });
@@ -539,7 +539,12 @@ app.post('/api/entry-logs', authenticateToken, async (req, res) => {
 
 app.get('/api/entry-logs', authenticateToken, async (req, res) => {
     try {
-        const { date, filterType, startDate, endDate, sectorId, cpf } = req.query;
+        const date = req.query.date as string;
+        const filterType = req.query.filterType as string;
+        const startDate = req.query.startDate as string;
+        const endDate = req.query.endDate as string;
+        const sectorId = req.query.sectorId as string;
+        const cpf = req.query.cpf as string;
 
         let queryOptions: any = {
             include: { sector: true },
