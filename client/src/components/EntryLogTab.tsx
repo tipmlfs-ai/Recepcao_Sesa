@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { type Sector } from '../types';
-import { UserPlus, Download, Search, FileText, Calendar } from 'lucide-react';
+import { UserPlus, Download, Search, FileText, Calendar, CheckCheck } from 'lucide-react';
 import { API_URL } from '../config/apiConfig';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -258,11 +258,21 @@ export const EntryLogTab: React.FC<EntryLogTabProps> = ({ sectors }) => {
                                     onChange={handleCpfChange}
                                     placeholder="000.000.000-00"
                                     maxLength={14}
-                                    className={`w-full bg-slate-900/50 border ${cpf.length === 14 && !validateCpf(cpf) ? 'border-rose-500 ring-1 ring-rose-500/30' : 'border-slate-700'} text-white rounded-xl px-4 py-3 focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 outline-none transition-all placeholder:text-slate-600 font-medium font-mono shadow-inner group-hover:border-slate-600`}
+                                    className={`w-full bg-slate-900/50 border ${
+                                        cpf.length === 14 
+                                        ? (validateCpf(cpf) ? 'border-emerald-500 ring-1 ring-emerald-500/30' : 'border-rose-500 ring-1 ring-rose-500/30') 
+                                        : 'border-slate-700'
+                                    } text-white rounded-xl px-4 py-3 focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 outline-none transition-all placeholder:text-slate-600 font-medium font-mono shadow-inner group-hover:border-slate-600`}
                                     required
                                 />
-                                {cpf.length === 14 && !validateCpf(cpf) && (
-                                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-rose-400 text-[10px] font-bold bg-rose-500/10 px-1.5 py-0.5 rounded border border-rose-500/20">Inválido</div>
+                                {cpf.length === 14 && (
+                                    validateCpf(cpf) ? (
+                                        <div className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-400 text-[10px] font-bold bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 flex items-center gap-1">
+                                            <CheckCheck className="w-3 h-3" /> Válido
+                                        </div>
+                                    ) : (
+                                        <div className="absolute right-3 top-1/2 -translate-y-1/2 text-rose-400 text-[10px] font-bold bg-rose-500/10 px-1.5 py-0.5 rounded border border-rose-500/20">Inválido</div>
+                                    )
                                 )}
                                 {searchingCpf && (
                                     <div className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-400 text-xs font-bold animate-pulse">Buscando...</div>

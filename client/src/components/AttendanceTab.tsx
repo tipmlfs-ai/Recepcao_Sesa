@@ -303,11 +303,21 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({ sectors }) => {
                                     onChange={handleCpfChange}
                                     placeholder="000.000.000-00"
                                     maxLength={14}
-                                    className={`w-full bg-slate-900/50 border ${cpf.length === 14 && !validateCpf(cpf) ? 'border-rose-500 ring-1 ring-rose-500/30' : 'border-slate-700'} text-white rounded-2xl px-5 py-4 focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-600 font-medium font-mono text-lg shadow-inner group-hover:border-slate-600`}
+                                    className={`w-full bg-slate-900/50 border ${
+                                        cpf.length === 14 
+                                        ? (validateCpf(cpf) ? 'border-emerald-500 ring-1 ring-emerald-500/30' : 'border-rose-500 ring-1 ring-rose-500/30') 
+                                        : 'border-slate-700'
+                                    } text-white rounded-2xl px-5 py-4 focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-600 font-medium font-mono text-lg shadow-inner group-hover:border-slate-600`}
                                     required
                                 />
-                                {cpf.length === 14 && !validateCpf(cpf) && (
-                                    <div className="absolute right-4 top-1/2 -translate-y-1/2 text-rose-400 text-xs font-bold bg-rose-500/10 px-2 py-1 rounded-md border border-rose-500/20">Inválido</div>
+                                {cpf.length === 14 && (
+                                    validateCpf(cpf) ? (
+                                        <div className="absolute right-4 top-1/2 -translate-y-1/2 text-emerald-400 text-xs font-bold bg-emerald-500/10 px-2 py-1 rounded-md border border-emerald-500/20 flex items-center gap-1">
+                                            <CheckCheck className="w-3 h-3" /> Válido
+                                        </div>
+                                    ) : (
+                                        <div className="absolute right-4 top-1/2 -translate-y-1/2 text-rose-400 text-xs font-bold bg-rose-500/10 px-2 py-1 rounded-md border border-rose-500/20">Inválido</div>
+                                    )
                                 )}
                                 {searchingCpf && (
                                     <div className="absolute right-4 top-1/2 -translate-y-1/2 text-indigo-400 text-xs font-bold animate-pulse bg-indigo-500/10 px-2 py-1 rounded-md border border-indigo-500/20">Buscando...</div>
