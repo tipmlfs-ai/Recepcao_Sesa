@@ -13,6 +13,15 @@ const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key-change-in-product
 const app = (0, express_1.default)();
 const prisma = new client_1.PrismaClient();
 const PORT = process.env.PORT || 3001;
+// --- DATABASE URL SAFETY CHECK ---
+const dbUrl = process.env.DATABASE_URL || '';
+if (dbUrl.includes(':6543') && !dbUrl.includes('pgbouncer=true')) {
+    console.error(' [CRÍTICO] DATABASE_URL está usando a porta do pooler (6543) mas está faltando "?pgbouncer=true".');
+    console.warn(' Isso causará erros de "prepared statement already exists" (42P05) em produção.');
+}
+// Log connection string (masked) to help verify Vercel environment
+const maskedUrl = dbUrl.replace(/:([^@]+)@/, ':****@');
+console.log(`[Database] Conectando ao banco de dados: ${maskedUrl}`);
 // Helper to reset date to start of day
 function todayReset(d) {
     d.setHours(0, 0, 0, 0);
@@ -21,33 +30,28 @@ function todayReset(d) {
 app.use((0, cors_1.default)());
 app.use(express_1.default.json());
 // Daily Queue Reset Middleware - Serverless Compatible
-let hasCheckedInitialDate = false;
-let lastResetDate = new Date().getDate();
 app.use(async (req, res, next) => {
     const today = new Date();
-    const currentDay = today.getDate();
-    // We need to check the DB if:
-    // 1. The day has changed while server is running.
-    // 2. Or this is a cold start (we haven't checked yet).
-    if (currentDay !== lastResetDate || !hasCheckedInitialDate) {
-        lastResetDate = currentDay;
-        hasCheckedInitialDate = true;
+    const currentDayStr = today.toISOString().split('T')[0]; // YYYY-MM-DD
+    // We use a string comparison for the date to avoid time-zone issues in serverless
+    if (globalThis.lastResetDateStr !== currentDayStr) {
+        globalThis.lastResetDateStr = currentDayStr;
         try {
             const startOfToday = new Date(today);
             startOfToday.setHours(0, 0, 0, 0);
             // Check if there are ANY waiting or in_service tickets from BEFORE today
             const oldTicketsExist = await prisma.visit.findFirst({
                 where: {
-                    ticketStatus: { in: ['WAITING', 'IN_SERVICE'] },
+                    ticketStatus: { in: ['WAITING', 'IN_SERVICE', 'NO_SHOW', 'IN_WAITING_ROOM'] },
                     timestamp: { lt: startOfToday }
                 }
             });
             if (oldTicketsExist) {
-                console.log('[Daily Reset] Pendências de dias anteriores encontradas. Executando limpeza...');
+                console.log(`[Daily Reset] [${currentDayStr}] Pendências de dias anteriores encontradas. Executando limpeza...`);
                 // 1. Expire old pending tickets
                 await prisma.visit.updateMany({
                     where: {
-                        ticketStatus: { in: ['WAITING', 'IN_SERVICE'] },
+                        ticketStatus: { in: ['WAITING', 'IN_SERVICE', 'NO_SHOW', 'IN_WAITING_ROOM'] },
                         timestamp: { lt: startOfToday }
                     },
                     data: { ticketStatus: 'EXPIRED' }
@@ -69,104 +73,17 @@ app.use(async (req, res, next) => {
                 }
                 console.log('[Daily Reset] Filas zeradas e recalibradas perfeitamente para o dia de hoje.');
             }
+            else {
+                console.log(`[Daily Reset] [${currentDayStr}] Fila já está limpa para hoje.`);
+            }
         }
         catch (error) {
             console.error('[Daily Reset] Erro:', error);
-            // On failure, allow re-check next time to ensure consistency
-            hasCheckedInitialDate = false;
+            // On failure, reset the global check so it tries again on next request
+            globalThis.lastResetDateStr = '';
         }
     }
     next();
-});
-// API Routes
-app.get('/', (req, res) => {
-    res.send(`
-        <html>
-            <body style="font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; flex-direction: column;">
-                <h1>O servidor backend está rodando corretamente! ✅</h1>
-                <p>Esta é a porta do <b>backend</b> (3001). A interface do usuário não fica aqui.</p>
-                <a href="http://localhost:5173" style="padding: 10px 20px; background: #0f172a; color: white; text-decoration: none; border-radius: 8px; margin-top: 20px;">
-                    Acessar o Painel Front-End (localhost:5173)
-                </a>
-            </body>
-        </html>
-    `);
-});
-app.get('/api/sectors', async (req, res) => {
-    try {
-        const sectors = await prisma.sector.findMany({
-            orderBy: { name: 'asc' },
-        });
-        res.json(sectors);
-    }
-    catch (error) {
-        res.status(500).json({ error: 'Failed to fetch sectors', details: error.message, stack: error.stack });
-    }
-});
-app.get('/api/sectors/:id', async (req, res) => {
-    try {
-        const sector = await prisma.sector.findUnique({
-            where: { id: req.params.id },
-            include: { user: true } // Include user when getting single sector just in case
-        });
-        if (!sector) {
-            return res.status(404).json({ error: 'Sector not found' });
-        }
-        res.json(sector);
-    }
-    catch (error) {
-        res.status(500).json({ error: 'Failed to fetch sector' });
-    }
-});
-// --- PUBLIC QUEUE DISPLAY ENDPOINT (no auth required) ---
-app.get('/api/queue/display', async (req, res) => {
-    try {
-        const startOfToday = new Date();
-        startOfToday.setHours(0, 0, 0, 0);
-        // Fetch today's active tickets (IN_SERVICE, WAITING, and IN_WAITING_ROOM), ordered by timestamp asc
-        const activeVisits = await prisma.visit.findMany({
-            where: {
-                ticketStatus: { in: ['IN_SERVICE', 'WAITING', 'IN_WAITING_ROOM'] },
-                timestamp: { gte: startOfToday }
-            },
-            orderBy: { timestamp: 'asc' },
-            take: 20,
-            include: {
-                sector: { select: { name: true } },
-                citizen: { select: { name: true } }
-            }
-        });
-        // Calculate average service time heuristic:
-        // If we have finished visits, estimate based on total elapsed time vs finished count
-        const finishedCount = await prisma.visit.count({
-            where: {
-                ticketStatus: 'FINISHED',
-                timestamp: { gte: startOfToday }
-            }
-        });
-        let avgWaitMinutes = null;
-        if (finishedCount > 0) {
-            // Approximate: total minutes elapsed since start of day / finished count
-            const nowMs = Date.now();
-            const startMs = startOfToday.getTime();
-            const elapsedMinutes = (nowMs - startMs) / 60000;
-            avgWaitMinutes = Math.max(1, Math.round(elapsedMinutes / finishedCount));
-        }
-        const tickets = activeVisits.map(v => ({
-            id: v.id,
-            code: v.code,
-            sectorName: v.sector?.name ?? 'Geral',
-            citizenName: v.citizen?.name ?? 'Cidadão',
-            status: v.ticketStatus,
-            timestamp: v.timestamp,
-            calledAt: v.calledAt
-        }));
-        res.json({ tickets, avgWaitMinutes });
-    }
-    catch (error) {
-        console.error('Error fetching queue display:', error);
-        res.status(500).json({ error: 'Failed to fetch queue display data' });
-    }
 });
 // Middleware for JWT Verification
 const authenticateToken = (req, res, next) => {
@@ -191,6 +108,136 @@ const requireAdmin = (req, res, next) => {
     }
     next();
 };
+// API Routes
+app.get('/', (req, res) => {
+    res.send(`
+        <html>
+            <body style="font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; flex-direction: column;">
+                <h1>O servidor backend está rodando corretamente! ✅</h1>
+                <p>Esta é a porta do <b>backend</b> (3001). A interface do usuário não fica aqui.</p>
+                <a href="http://localhost:5173" style="padding: 10px 20px; background: #0f172a; color: white; text-decoration: none; border-radius: 8px; margin-top: 20px;">
+                    Acessar o Painel Front-End (localhost:5173)
+                </a>
+            </body>
+        </html>
+    `);
+});
+app.get('/api/sectors', async (req, res) => {
+    try {
+        const sectors = await prisma.sector.findMany({
+            orderBy: { name: 'asc' },
+            include: { resources: true }
+        });
+        res.json(sectors);
+    }
+    catch (error) {
+        res.status(500).json({ error: 'Failed to fetch sectors', details: error.message, stack: error.stack });
+    }
+});
+app.get('/api/sectors/:id', async (req, res) => {
+    try {
+        const sector = await prisma.sector.findUnique({
+            where: { id: req.params.id },
+            include: { user: true, resources: true } // Include user and resources
+        });
+        if (!sector) {
+            return res.status(404).json({ error: 'Sector not found' });
+        }
+        res.json(sector);
+    }
+    catch (error) {
+        res.status(500).json({ error: 'Failed to fetch sector' });
+    }
+});
+// --- RESOURCE MANAGEMENT ROUTES --- //
+app.post('/api/sectors/:id/resources', authenticateToken, async (req, res) => {
+    try {
+        const sectorId = req.params.id;
+        const { name } = req.body;
+        const resource = await prisma.resource.create({
+            data: { name, sectorId }
+        });
+        res.status(201).json(resource);
+    }
+    catch (error) {
+        res.status(500).json({ error: 'Failed to create resource' });
+    }
+});
+app.delete('/api/resources/:id', authenticateToken, async (req, res) => {
+    try {
+        const id = req.params.id;
+        // Block deletion if there are active visits for this resource
+        const activeVisits = await prisma.visit.findFirst({
+            where: {
+                resourceId: id,
+                ticketStatus: { in: ['WAITING', 'IN_WAITING_ROOM', 'IN_SERVICE'] }
+            }
+        });
+        if (activeVisits) {
+            return res.status(400).json({ error: 'Não é possível excluir recurso com tickets ativos na fila.' });
+        }
+        await prisma.resource.delete({ where: { id } });
+        res.json({ message: 'Resource deleted' });
+    }
+    catch (error) {
+        res.status(500).json({ error: 'Failed to delete resource' });
+    }
+});
+// --- PUBLIC QUEUE DISPLAY ENDPOINT (no auth required) ---
+app.get('/api/queue/display', async (req, res) => {
+    try {
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+        // Fetch today's active tickets (IN_SERVICE, IN_WAITING_ROOM, and NO_SHOW)
+        const activeVisits = await prisma.visit.findMany({
+            where: {
+                ticketStatus: { in: ['IN_SERVICE', 'IN_WAITING_ROOM', 'NO_SHOW'] },
+                sector: { isVisibleOnPanel: true }, // Filter to only sectors visible on panel
+                timestamp: { gte: startOfToday }
+            },
+            orderBy: { timestamp: 'desc' },
+            take: 20,
+            include: {
+                sector: { select: { name: true, callCooldown: true } },
+                citizen: { select: { name: true } },
+                resource: { select: { name: true } }
+            }
+        });
+        // Calculate average service time heuristic:
+        // If we have finished visits, estimate based on total elapsed time vs finished count
+        const finishedCount = await prisma.visit.count({
+            where: {
+                ticketStatus: 'FINISHED',
+                timestamp: { gte: startOfToday }
+            }
+        });
+        let avgWaitMinutes = null;
+        if (finishedCount > 0) {
+            // Approximate: total minutes elapsed since start of day / finished count
+            const nowMs = Date.now();
+            const startMs = startOfToday.getTime();
+            const elapsedMinutes = (nowMs - startMs) / 60000;
+            avgWaitMinutes = Math.max(1, Math.round(elapsedMinutes / finishedCount));
+        }
+        const tickets = activeVisits.map(v => ({
+            id: v.id,
+            code: v.code,
+            sectorName: v.sector?.name ?? 'Geral',
+            sectorCooldown: v.sector?.callCooldown ?? 120,
+            citizenName: v.citizen?.name ?? 'Cidadão',
+            resourceName: v.resource?.name,
+            status: v.ticketStatus,
+            isPriority: v.isPriority,
+            timestamp: v.timestamp,
+            calledAt: v.calledAt
+        }));
+        res.json({ tickets, avgWaitMinutes });
+    }
+    catch (error) {
+        console.error('Error fetching queue display:', error);
+        res.status(500).json({ error: 'Failed to fetch queue display data' });
+    }
+});
 // --- AUTHENTICATION ROUTES --- //
 app.post('/api/auth/login', async (req, res) => {
     try {
@@ -240,7 +287,7 @@ app.get('/api/citizens/:cpf', authenticateToken, async (req, res) => {
 });
 app.post('/api/visits', authenticateToken, async (req, res) => {
     try {
-        const { cpf, name, phone, sectorId } = req.body;
+        const { cpf, name, phone, sectorId, isPriority, resourceId } = req.body;
         const userId = req.user.id;
         // Verify sector is not AWAY
         const sector = await prisma.sector.findUnique({ where: { id: sectorId } });
@@ -268,7 +315,8 @@ app.post('/api/visits', authenticateToken, async (req, res) => {
             .substring(0, 3)
             .toUpperCase() || 'GER'; // fallback to GER if no letters
         const ticketNum = totalCount + 1;
-        const code = `${prefix}-${String(ticketNum).padStart(3, '0')}`;
+        const baseCode = `${prefix}-${String(ticketNum).padStart(3, '0')}`;
+        const code = isPriority ? `P-${baseCode}` : baseCode;
         // Create visit
         const visit = await prisma.visit.create({
             data: {
@@ -276,9 +324,11 @@ app.post('/api/visits', authenticateToken, async (req, res) => {
                 citizenId: citizen.cpf,
                 sectorId,
                 userId,
+                resourceId: resourceId || null,
+                isPriority: isPriority || false,
                 ticketStatus: 'WAITING'
             },
-            include: { citizen: true, sector: true }
+            include: { citizen: true, sector: true, resource: true }
         });
         // Increment queue count
         await prisma.sector.update({
@@ -329,12 +379,13 @@ app.get('/api/visits', authenticateToken, async (req, res) => {
                 const customStart = req.query.startDate;
                 const customEnd = req.query.endDate;
                 if (customStart && customEnd) {
-                    // Using T00:00:00 to ensure date is parsed in local time/midnight correctly
-                    startDate = new Date(customStart + 'T00:00:00');
-                    endDate = new Date(customEnd + 'T23:59:59.999');
+                    // Ensures the dates are parsed as local midnight (UTC-3 for user)
+                    // We also ensure end date includes the whole day
+                    startDate = new Date(customStart + 'T00:00:00-03:00');
+                    endDate = new Date(customEnd + 'T23:59:59.999-03:00');
                 }
                 else {
-                    // Fallback to today if custom range is missing params
+                    // Fallback to today UTC-3
                     startDate = new Date();
                     startDate.setHours(0, 0, 0, 0);
                     endDate = new Date();
@@ -385,6 +436,103 @@ app.get('/api/visits', authenticateToken, async (req, res) => {
             details: error.message,
             hint: 'Provavelmente existem registros antigos com a coluna "code" vazia (NULL) no banco de dados. Rode o script de limpeza no SQL Editor do Supabase.'
         });
+    }
+});
+// --- ENTRY LOG (CADERNO DE ENTRADA) ROUTES --- //
+app.post('/api/entry-logs', authenticateToken, async (req, res) => {
+    try {
+        const { cpf, name, phone, sectorId } = req.body;
+        // As requested by the user, if the citizen doesn't exist, we create them
+        // to populate the phone book for future use.
+        const citizen = await prisma.citizen.upsert({
+            where: { cpf },
+            update: { name, phone },
+            create: { cpf, name, phone }
+        });
+        const entryLog = await prisma.entryLog.create({
+            data: {
+                cpf: citizen.cpf,
+                name: citizen.name,
+                phone: citizen.phone,
+                sectorId
+            },
+            include: { sector: true }
+        });
+        res.status(201).json(entryLog);
+    }
+    catch (error) {
+        console.error('Error creating entry log:', error);
+        res.status(500).json({ error: 'Failed to create entry log' });
+    }
+});
+app.get('/api/entry-logs', authenticateToken, async (req, res) => {
+    try {
+        const { date, filterType, startDate, endDate, sectorId, cpf } = req.query;
+        let queryOptions = {
+            include: { sector: true },
+            orderBy: { timestamp: 'desc' },
+            where: {}
+        };
+        if (sectorId) {
+            queryOptions.where.sectorId = sectorId;
+        }
+        if (cpf) {
+            queryOptions.where.cpf = { contains: cpf };
+        }
+        if (filterType) {
+            let sDate;
+            let eDate;
+            if (filterType === 'custom') {
+                if (startDate && endDate) {
+                    sDate = new Date(startDate + 'T00:00:00-03:00');
+                    eDate = new Date(endDate + 'T23:59:59.999-03:00');
+                }
+                else {
+                    sDate = new Date();
+                    sDate.setHours(0, 0, 0, 0);
+                    eDate = new Date();
+                    eDate.setHours(23, 59, 59, 999);
+                }
+            }
+            else {
+                const targetDate = date ? new Date(date) : new Date();
+                sDate = new Date(targetDate);
+                eDate = new Date(targetDate);
+                if (filterType === 'day') {
+                    sDate.setHours(0, 0, 0, 0);
+                    eDate.setHours(23, 59, 59, 999);
+                }
+                else if (filterType === 'week') {
+                    const day = sDate.getDay();
+                    sDate.setDate(sDate.getDate() - day);
+                    sDate.setHours(0, 0, 0, 0);
+                    eDate.setDate(eDate.getDate() + (6 - day));
+                    eDate.setHours(23, 59, 59, 999);
+                }
+                else if (filterType === 'month') {
+                    sDate.setDate(1);
+                    sDate.setHours(0, 0, 0, 0);
+                    eDate.setMonth(eDate.getMonth() + 1);
+                    eDate.setDate(0);
+                    eDate.setHours(23, 59, 59, 999);
+                }
+            }
+            queryOptions.where.timestamp = { gte: sDate, lte: eDate };
+        }
+        else if (!cpf) {
+            // Default to today if no specific filter
+            const todayStart = new Date();
+            todayStart.setHours(0, 0, 0, 0);
+            const todayEnd = new Date();
+            todayEnd.setHours(23, 59, 59, 999);
+            queryOptions.where.timestamp = { gte: todayStart, lte: todayEnd };
+        }
+        const logs = await prisma.entryLog.findMany(queryOptions);
+        res.json(logs);
+    }
+    catch (error) {
+        console.error('Error fetching entry logs:', error);
+        res.status(500).json({ error: 'Failed to fetch entry logs' });
     }
 });
 // --- ADMIN USERS ROUTES --- //
@@ -491,11 +639,13 @@ app.patch('/api/visits/:code/no-show', authenticateToken, async (req, res) => {
             return res.status(400).json({ error: `Ticket [${code}] já foi finalizado anteriormente.` });
         if (visit.ticketStatus === 'EXPIRED')
             return res.status(400).json({ error: `Ticket [${code}] expirou por ser de um dia anterior.` });
-        // Mark as finished but ideally we could have a specific enum. Using FINISHED for now to remove from queue
-        // A future improvement could be logging a "NO_SHOW" specifically in another field or description.
+        // Mark as NO_SHOW so the ticket stays visible on the display panel (orange)
         const updated = await prisma.visit.update({
             where: { id: visit.id },
-            data: { ticketStatus: 'FINISHED' }
+            data: {
+                ticketStatus: 'NO_SHOW',
+                finishedAt: new Date()
+            }
         });
         res.json(updated);
     }
@@ -507,6 +657,7 @@ app.patch('/api/visits/:code/no-show', authenticateToken, async (req, res) => {
 app.post('/api/sectors/:id/call-next', authenticateToken, async (req, res) => {
     try {
         const sectorId = req.params.id;
+        const { resourceId } = req.body || {};
         // Get sector info to check if it has a waiting room
         const sector = await prisma.sector.findUnique({
             where: { id: sectorId }
@@ -519,27 +670,59 @@ app.post('/api/sectors/:id/call-next', authenticateToken, async (req, res) => {
         let nextVisit = null;
         // 1. If Sector has Waiting Room, we must call from IN_WAITING_ROOM first
         if (sector.hasWaitingRoom) {
+            // Priority First
             nextVisit = await prisma.visit.findFirst({
                 where: {
                     sectorId,
+                    resourceId: resourceId !== undefined ? resourceId : undefined,
                     ticketStatus: 'IN_WAITING_ROOM',
+                    isPriority: true,
                     timestamp: { gte: startOfToday }
                 },
-                orderBy: { calledToWaitingRoomAt: 'asc' }, // FIFO in the waiting room
+                orderBy: { calledToWaitingRoomAt: 'asc' },
                 include: { citizen: true, sector: true }
             });
+            // If no priority, then Normal
+            if (!nextVisit) {
+                nextVisit = await prisma.visit.findFirst({
+                    where: {
+                        sectorId,
+                        resourceId: resourceId !== undefined ? resourceId : undefined,
+                        ticketStatus: 'IN_WAITING_ROOM',
+                        timestamp: { gte: startOfToday }
+                    },
+                    orderBy: { calledToWaitingRoomAt: 'asc' },
+                    include: { citizen: true, sector: true }
+                });
+            }
         }
         // 2. If no one in waiting room OR sector doesn't use waiting room, call from WAITING
         if (!nextVisit) {
+            // Priority First
             nextVisit = await prisma.visit.findFirst({
                 where: {
                     sectorId,
+                    resourceId: resourceId !== undefined ? resourceId : undefined,
                     ticketStatus: 'WAITING',
+                    isPriority: true,
                     timestamp: { gte: startOfToday }
                 },
                 orderBy: { timestamp: 'asc' },
                 include: { citizen: true, sector: true }
             });
+            // If no priority, then Normal
+            if (!nextVisit) {
+                nextVisit = await prisma.visit.findFirst({
+                    where: {
+                        sectorId,
+                        resourceId: resourceId !== undefined ? resourceId : undefined,
+                        ticketStatus: 'WAITING',
+                        timestamp: { gte: startOfToday }
+                    },
+                    orderBy: { timestamp: 'asc' },
+                    include: { citizen: true, sector: true }
+                });
+            }
         }
         if (!nextVisit) {
             return res.status(404).json({ error: 'Nenhum cidadão aguardando na fila.' });
@@ -553,11 +736,13 @@ app.post('/api/sectors/:id/call-next', authenticateToken, async (req, res) => {
             },
             include: { citizen: true, sector: true }
         });
-        // Decrement sector queue count since the person is no longer waiting
-        await prisma.sector.update({
-            where: { id: sectorId },
-            data: { queueCount: { decrement: 1 } }
-        });
+        // Decrement sector queue count ONLY if the person is coming from the general WAITING queue
+        if (nextVisit.ticketStatus === 'WAITING') {
+            await prisma.sector.update({
+                where: { id: sectorId },
+                data: { queueCount: { decrement: 1 } }
+            });
+        }
         res.json(updatedVisit);
     }
     catch (error) {
@@ -581,7 +766,10 @@ app.patch('/api/visits/:code/checkout', authenticateToken, async (req, res) => {
         // Mark as finished
         const updated = await prisma.visit.update({
             where: { id: visit.id },
-            data: { ticketStatus: 'FINISHED' }
+            data: {
+                ticketStatus: 'FINISHED',
+                finishedAt: new Date()
+            }
         });
         res.json(updated);
     }
@@ -651,15 +839,29 @@ app.post('/api/sectors/:id/call-to-waiting-room', authenticateToken, async (req,
             }
         }
         // 3. Find next in QUEUE
-        const nextVisit = await prisma.visit.findFirst({
+        // Priority First
+        let nextVisit = await prisma.visit.findFirst({
             where: {
                 sectorId,
                 ticketStatus: 'WAITING',
+                isPriority: true,
                 timestamp: { gte: startOfToday }
             },
             orderBy: { timestamp: 'asc' },
             include: { citizen: true, sector: true }
         });
+        // If no priority, then Normal
+        if (!nextVisit) {
+            nextVisit = await prisma.visit.findFirst({
+                where: {
+                    sectorId,
+                    ticketStatus: 'WAITING',
+                    timestamp: { gte: startOfToday }
+                },
+                orderBy: { timestamp: 'asc' },
+                include: { citizen: true, sector: true }
+            });
+        }
         if (!nextVisit) {
             return res.status(404).json({ error: 'Nenhum cidadão aguardando na fila da recepção.' });
         }
@@ -671,6 +873,11 @@ app.post('/api/sectors/:id/call-to-waiting-room', authenticateToken, async (req,
                 calledToWaitingRoomAt: new Date()
             },
             include: { citizen: true, sector: true }
+        });
+        // 5. Decrement sector queue count since the person left the global WAITING queue
+        await prisma.sector.update({
+            where: { id: sectorId },
+            data: { queueCount: { decrement: 1 } }
         });
         res.json(updatedVisit);
     }
@@ -705,7 +912,7 @@ app.get('/api/sectors/:id/in-service', authenticateToken, async (req, res) => {
 app.patch('/api/sectors/:id', authenticateToken, requireAdmin, async (req, res) => {
     try {
         const id = req.params.id;
-        const { name, callCooldown, soundUrl, hasWaitingRoom, waitingRoomCapacity } = req.body;
+        const { name, callCooldown, soundUrl, hasWaitingRoom, waitingRoomCapacity, isHeterogeneous, isVisibleOnPanel } = req.body;
         const updatedSector = await prisma.sector.update({
             where: { id },
             data: {
@@ -713,7 +920,9 @@ app.patch('/api/sectors/:id', authenticateToken, requireAdmin, async (req, res) 
                 callCooldown: callCooldown !== undefined ? parseInt(callCooldown) : undefined,
                 soundUrl,
                 hasWaitingRoom: hasWaitingRoom !== undefined ? Boolean(hasWaitingRoom) : undefined,
-                waitingRoomCapacity: waitingRoomCapacity !== undefined ? parseInt(waitingRoomCapacity) : undefined
+                waitingRoomCapacity: waitingRoomCapacity !== undefined ? parseInt(waitingRoomCapacity) : undefined,
+                isHeterogeneous: isHeterogeneous !== undefined ? Boolean(isHeterogeneous) : undefined,
+                isVisibleOnPanel: isVisibleOnPanel !== undefined ? Boolean(isVisibleOnPanel) : undefined
             },
         });
         res.json(updatedSector);
@@ -761,6 +970,35 @@ app.patch('/api/sectors/:id/queue', authenticateToken, async (req, res) => {
     catch (error) {
         console.error('Error updating queue:', error);
         res.status(500).json({ error: 'Failed to update queue' });
+    }
+});
+app.get('/api/sync-queues-manual', async (req, res) => {
+    try {
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+        const sectors = await prisma.sector.findMany();
+        let synced = [];
+        for (const sector of sectors) {
+            const actualCount = await prisma.visit.count({
+                where: {
+                    sectorId: sector.id,
+                    ticketStatus: 'WAITING',
+                    timestamp: { gte: startOfToday }
+                }
+            });
+            if (sector.queueCount !== actualCount) {
+                await prisma.sector.update({
+                    where: { id: sector.id },
+                    data: { queueCount: actualCount }
+                });
+                synced.push({ sector: sector.name, old: sector.queueCount, new: actualCount });
+            }
+        }
+        res.json({ message: "Done", synced });
+    }
+    catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Failed to sync API' });
     }
 });
 app.use('/api/export', authenticateToken, exportRoutes_1.default);

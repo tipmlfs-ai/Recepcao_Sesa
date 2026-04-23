@@ -1031,11 +1031,35 @@ app.get('/api/sectors/:id/in-service', authenticateToken, async (req, res) => {
 
 // --- SECTOR STATUS & QUEUE REST ENDPOINTS ---
 
+// --- CREATE SECTOR (Admin only) ---
+app.post('/api/sectors', authenticateToken, requireAdmin, async (req, res) => {
+    try {
+        const { name, callCooldown, hasWaitingRoom, waitingRoomCapacity, isHeterogeneous, isVisibleOnPanel, isVisibleInEntryLog } = req.body;
+
+        const sector = await prisma.sector.create({
+            data: {
+                name,
+                callCooldown: callCooldown !== undefined ? parseInt(callCooldown) : 120,
+                hasWaitingRoom: hasWaitingRoom !== undefined ? Boolean(hasWaitingRoom) : false,
+                waitingRoomCapacity: waitingRoomCapacity !== undefined ? parseInt(waitingRoomCapacity) : 5,
+                isHeterogeneous: isHeterogeneous !== undefined ? Boolean(isHeterogeneous) : false,
+                isVisibleOnPanel: isVisibleOnPanel !== undefined ? Boolean(isVisibleOnPanel) : true,
+                isVisibleInEntryLog: isVisibleInEntryLog !== undefined ? Boolean(isVisibleInEntryLog) : true,
+            }
+        });
+
+        res.status(201).json(sector);
+    } catch (error) {
+        console.error('Error creating sector:', error);
+        res.status(500).json({ error: 'Failed to create sector' });
+    }
+});
+
 // --- GENERAL SECTOR UPDATE (Admin only) ---
 app.patch('/api/sectors/:id', authenticateToken, requireAdmin, async (req, res) => {
     try {
         const id = req.params.id as string;
-        const { name, callCooldown, soundUrl, hasWaitingRoom, waitingRoomCapacity, isHeterogeneous, isVisibleOnPanel } = req.body;
+        const { name, callCooldown, soundUrl, hasWaitingRoom, waitingRoomCapacity, isHeterogeneous, isVisibleOnPanel, isVisibleInEntryLog } = req.body;
 
         const updatedSector = await prisma.sector.update({
             where: { id },
@@ -1046,7 +1070,8 @@ app.patch('/api/sectors/:id', authenticateToken, requireAdmin, async (req, res) 
                 hasWaitingRoom: hasWaitingRoom !== undefined ? Boolean(hasWaitingRoom) : undefined,
                 waitingRoomCapacity: waitingRoomCapacity !== undefined ? parseInt(waitingRoomCapacity) : undefined,
                 isHeterogeneous: isHeterogeneous !== undefined ? Boolean(isHeterogeneous) : undefined,
-                isVisibleOnPanel: isVisibleOnPanel !== undefined ? Boolean(isVisibleOnPanel) : undefined
+                isVisibleOnPanel: isVisibleOnPanel !== undefined ? Boolean(isVisibleOnPanel) : undefined,
+                isVisibleInEntryLog: isVisibleInEntryLog !== undefined ? Boolean(isVisibleInEntryLog) : undefined
             },
         });
 

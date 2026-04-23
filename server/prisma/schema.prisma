@@ -41,6 +41,7 @@ model Sector {
   waitingRoomCapacity Int      @default(5)
   isHeterogeneous     Boolean  @default(false)
   isVisibleOnPanel    Boolean  @default(true)
+  isVisibleInEntryLog Boolean  @default(true)
   resources           Resource[]
   user                User?
   visits              Visit[]
