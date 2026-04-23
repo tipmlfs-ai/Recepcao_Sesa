@@ -207,6 +207,44 @@ const DataAnalytics: React.FC = () => {
         toast.info("A funcionalidade de agendamento por e-mail está em prévia e será lançada na próxima versão.");
     };
 
+    const handleExportEntryLog = async () => {
+        try {
+            const res = await fetch(`${API_URL}/api/export/entry-logs/pdf?filterType=month&date=${new Date().toISOString()}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                const blob = await res.json(); // Wait, entry-logs/pdf returns a blob (PDF)
+                // Actually the fetch for PDF should be handled as blob
+            }
+        } catch (error) {
+            console.error(error);
+        }
+    };
+
+    // Helper for PDF downloading
+    const downloadPdf = async (url: string, filename: string) => {
+        try {
+            toast.info("Gerando PDF do Caderno...", { id: 'export-loading' });
+            const res = await fetch(url, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (!res.ok) throw new Error("Erro ao gerar PDF");
+            
+            const blob = await res.blob();
+            const downloadUrl = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = downloadUrl;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(downloadUrl);
+            toast.success("PDF baixado com sucesso!", { id: 'export-loading' });
+        } catch (err) {
+            toast.error("Erro ao exportar PDF", { id: 'export-loading' });
+        }
+    };
+
     const handleDownloadKPIDict = () => {
         const printContent = `
             <!DOCTYPE html>
@@ -317,12 +355,19 @@ const DataAnalytics: React.FC = () => {
                     </div>
                 </div>
 
-                <div className="relative">
-                    <button
-                        onClick={() => setShowExportModal(true)}
-                        className="flex items-center gap-2 px-4 py-2.5 bg-indigo-500/10 border border-indigo-500/50 hover:bg-indigo-500/20 text-indigo-300 font-bold rounded-lg transition-all"
+                <div className="flex flex-wrap items-center gap-3">
+                    <button 
+                        onClick={() => downloadPdf(`${API_URL}/api/export/entry-logs/pdf?filterType=month&date=${new Date().toISOString()}`, `Caderno_Entrada_${new Date().getMonth() + 1}.pdf`)}
+                        className="bg-emerald-600 hover:bg-emerald-700 px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 text-sm text-white shadow-lg"
                     >
-                        <Download className="w-4 h-4" /> Exportar Global
+                        <FileText className="w-4 h-4" /> Exportar Caderno (Mês)
+                    </button>
+                    
+                    <button 
+                        onClick={() => setShowExportModal(true)}
+                        className="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 text-sm text-white shadow-lg"
+                    >
+                        <Download className="w-4 h-4" /> Exportar Atendimentos
                     </button>
                 </div>
             </header>
