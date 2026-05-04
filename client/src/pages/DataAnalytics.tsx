@@ -40,7 +40,7 @@ const DataAnalytics: React.FC = () => {
         const d = new Date();
         return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     });
-    const [isExporting, setIsExporting] = useState(false);
+
 
     useEffect(() => {
         fetchData();
@@ -325,9 +325,8 @@ const DataAnalytics: React.FC = () => {
 
                 <div className="flex flex-wrap items-center gap-3">
                     <button 
-                        disabled={isExporting}
                         onClick={() => setShowExportModal(true)}
-                        className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-800/50 px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 text-sm text-white shadow-lg"
+                        className="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 text-sm text-white shadow-lg"
                     >
                         <Download className="w-4 h-4" /> Exportar Relatórios
                     </button>
