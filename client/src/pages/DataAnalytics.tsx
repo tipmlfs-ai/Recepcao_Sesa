@@ -213,34 +213,6 @@ const DataAnalytics: React.FC = () => {
     };
 
 
-
-    // Helper for file downloading
-    const downloadFile = async (url: string, filename: string, type: 'PDF' | 'XLSX') => {
-        try {
-            setIsExporting(true);
-            toast.info(`Gerando ${type}... Isso pode levar alguns segundos.`, { id: 'export-loading' });
-            const res = await fetch(url, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (!res.ok) throw new Error(`Erro ao gerar ${type}`);
-            
-            const blob = await res.blob();
-            const downloadUrl = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = downloadUrl;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            window.URL.revokeObjectURL(downloadUrl);
-            toast.success(`${type} gerado e baixado!`, { id: 'export-loading' });
-        } catch (err) {
-            toast.error(`Erro ao exportar ${type}`, { id: 'export-loading' });
-        } finally {
-            setIsExporting(false);
-        }
-    };
-
     const handleDownloadKPIDict = () => {
         const printContent = `
             <!DOCTYPE html>
