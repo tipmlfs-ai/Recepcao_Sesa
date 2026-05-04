@@ -58,44 +58,46 @@ async function getFilteredVisits(req: Request) {
     }
 
     if (filterType) {
-        let startDate: Date;
-        let endDate: Date;
+        if (filterType !== 'all') {
+            let startDate: Date;
+            let endDate: Date;
 
-        if (filterType === 'custom') {
-            const customStart = req.query.startDate as string;
-            const customEnd = req.query.endDate as string;
-            if (customStart && customEnd) {
-                startDate = new Date(customStart + 'T00:00:00-03:00');
-                endDate = new Date(customEnd + 'T23:59:59.999-03:00');
+            if (filterType === 'custom') {
+                const customStart = req.query.startDate as string;
+                const customEnd = req.query.endDate as string;
+                if (customStart && customEnd) {
+                    startDate = new Date(customStart + 'T00:00:00-03:00');
+                    endDate = new Date(customEnd + 'T23:59:59.999-03:00');
+                } else {
+                    startDate = new Date();
+                    startDate.setHours(0, 0, 0, 0);
+                    endDate = new Date();
+                    endDate.setHours(23, 59, 59, 999);
+                }
             } else {
-                startDate = new Date();
-                startDate.setHours(0, 0, 0, 0);
-                endDate = new Date();
-                endDate.setHours(23, 59, 59, 999);
-            }
-        } else {
-            const targetDate = date ? new Date(date as string) : new Date();
-            startDate = new Date(targetDate);
-            endDate = new Date(targetDate);
+                const targetDate = date ? new Date(date as string) : new Date();
+                startDate = new Date(targetDate);
+                endDate = new Date(targetDate);
 
-            if (filterType === 'day') {
-                startDate.setHours(0, 0, 0, 0);
-                endDate.setHours(23, 59, 59, 999);
-            } else if (filterType === 'week') {
-                const day = startDate.getDay();
-                startDate.setDate(startDate.getDate() - day);
-                startDate.setHours(0, 0, 0, 0);
-                endDate.setDate(endDate.getDate() + (6 - day));
-                endDate.setHours(23, 59, 59, 999);
-            } else if (filterType === 'month') {
-                startDate.setDate(1);
-                startDate.setHours(0, 0, 0, 0);
-                endDate.setMonth(endDate.getMonth() + 1);
-                endDate.setDate(0);
-                endDate.setHours(23, 59, 59, 999);
+                if (filterType === 'day') {
+                    startDate.setHours(0, 0, 0, 0);
+                    endDate.setHours(23, 59, 59, 999);
+                } else if (filterType === 'week') {
+                    const day = startDate.getDay();
+                    startDate.setDate(startDate.getDate() - day);
+                    startDate.setHours(0, 0, 0, 0);
+                    endDate.setDate(endDate.getDate() + (6 - day));
+                    endDate.setHours(23, 59, 59, 999);
+                } else if (filterType === 'month') {
+                    startDate.setDate(1);
+                    startDate.setHours(0, 0, 0, 0);
+                    endDate.setMonth(endDate.getMonth() + 1);
+                    endDate.setDate(0);
+                    endDate.setHours(23, 59, 59, 999);
+                }
             }
+            queryOptions.where.timestamp = { gte: startDate, lte: endDate };
         }
-        queryOptions.where.timestamp = { gte: startDate, lte: endDate };
     } else if (!code && !cpf && !ticketStatus) {
         const todayStart = new Date();
         todayStart.setHours(0, 0, 0, 0);
@@ -399,33 +401,35 @@ router.get('/entry-logs/pdf', async (req, res) => {
         if (cpf) queryOptions.where.cpf = { contains: cpf as string };
 
         if (filterType) {
-            let sDate: Date;
-            let eDate: Date;
+            if (filterType !== 'all') {
+                let sDate: Date;
+                let eDate: Date;
 
-            if (filterType === 'custom') {
-                if (startDate && endDate) {
-                    sDate = new Date((startDate as string) + 'T00:00:00-03:00');
-                    eDate = new Date((endDate as string) + 'T23:59:59.999-03:00');
+                if (filterType === 'custom') {
+                    if (startDate && endDate) {
+                        sDate = new Date((startDate as string) + 'T00:00:00-03:00');
+                        eDate = new Date((endDate as string) + 'T23:59:59.999-03:00');
+                    } else {
+                        sDate = new Date(); sDate.setHours(0, 0, 0, 0);
+                        eDate = new Date(); eDate.setHours(23, 59, 59, 999);
+                    }
                 } else {
-                    sDate = new Date(); sDate.setHours(0, 0, 0, 0);
-                    eDate = new Date(); eDate.setHours(23, 59, 59, 999);
-                }
-            } else {
-                const targetDate = date ? new Date(date as string) : new Date();
-                sDate = new Date(targetDate); eDate = new Date(targetDate);
+                    const targetDate = date ? new Date(date as string) : new Date();
+                    sDate = new Date(targetDate); eDate = new Date(targetDate);
 
-                if (filterType === 'day') {
-                    sDate.setHours(0, 0, 0, 0); eDate.setHours(23, 59, 59, 999);
-                } else if (filterType === 'week') {
-                    const day = sDate.getDay();
-                    sDate.setDate(sDate.getDate() - day); sDate.setHours(0, 0, 0, 0);
-                    eDate.setDate(eDate.getDate() + (6 - day)); eDate.setHours(23, 59, 59, 999);
-                } else if (filterType === 'month') {
-                    sDate.setDate(1); sDate.setHours(0, 0, 0, 0);
-                    eDate.setMonth(eDate.getMonth() + 1); eDate.setDate(0); eDate.setHours(23, 59, 59, 999);
+                    if (filterType === 'day') {
+                        sDate.setHours(0, 0, 0, 0); eDate.setHours(23, 59, 59, 999);
+                    } else if (filterType === 'week') {
+                        const day = sDate.getDay();
+                        sDate.setDate(sDate.getDate() - day); sDate.setHours(0, 0, 0, 0);
+                        eDate.setDate(eDate.getDate() + (6 - day)); eDate.setHours(23, 59, 59, 999);
+                    } else if (filterType === 'month') {
+                        sDate.setDate(1); sDate.setHours(0, 0, 0, 0);
+                        eDate.setMonth(eDate.getMonth() + 1); eDate.setDate(0); eDate.setHours(23, 59, 59, 999);
+                    }
                 }
+                queryOptions.where.timestamp = { gte: sDate, lte: eDate };
             }
-            queryOptions.where.timestamp = { gte: sDate, lte: eDate };
         } else if (!cpf) {
             const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
             const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
@@ -584,33 +588,35 @@ router.get('/entry-logs/xlsx', async (req, res) => {
         if (cpf) queryOptions.where.cpf = { contains: cpf as string };
 
         if (filterType) {
-            let sDate: Date;
-            let eDate: Date;
+            if (filterType !== 'all') {
+                let sDate: Date;
+                let eDate: Date;
 
-            if (filterType === 'custom') {
-                if (startDate && endDate) {
-                    sDate = new Date((startDate as string) + 'T00:00:00-03:00');
-                    eDate = new Date((endDate as string) + 'T23:59:59.999-03:00');
+                if (filterType === 'custom') {
+                    if (startDate && endDate) {
+                        sDate = new Date((startDate as string) + 'T00:00:00-03:00');
+                        eDate = new Date((endDate as string) + 'T23:59:59.999-03:00');
+                    } else {
+                        sDate = new Date(); sDate.setHours(0, 0, 0, 0);
+                        eDate = new Date(); eDate.setHours(23, 59, 59, 999);
+                    }
                 } else {
-                    sDate = new Date(); sDate.setHours(0, 0, 0, 0);
-                    eDate = new Date(); eDate.setHours(23, 59, 59, 999);
-                }
-            } else {
-                const targetDate = date ? new Date(date as string) : new Date();
-                sDate = new Date(targetDate); eDate = new Date(targetDate);
+                    const targetDate = date ? new Date(date as string) : new Date();
+                    sDate = new Date(targetDate); eDate = new Date(targetDate);
 
-                if (filterType === 'day') {
-                    sDate.setHours(0, 0, 0, 0); eDate.setHours(23, 59, 59, 999);
-                } else if (filterType === 'week') {
-                    const day = sDate.getDay();
-                    sDate.setDate(sDate.getDate() - day); sDate.setHours(0, 0, 0, 0);
-                    eDate.setDate(eDate.getDate() + (6 - day)); eDate.setHours(23, 59, 59, 999);
-                } else if (filterType === 'month') {
-                    sDate.setDate(1); sDate.setHours(0, 0, 0, 0);
-                    eDate.setMonth(eDate.getMonth() + 1); eDate.setDate(0); eDate.setHours(23, 59, 59, 999);
+                    if (filterType === 'day') {
+                        sDate.setHours(0, 0, 0, 0); eDate.setHours(23, 59, 59, 999);
+                    } else if (filterType === 'week') {
+                        const day = sDate.getDay();
+                        sDate.setDate(sDate.getDate() - day); sDate.setHours(0, 0, 0, 0);
+                        eDate.setDate(eDate.getDate() + (6 - day)); eDate.setHours(23, 59, 59, 999);
+                    } else if (filterType === 'month') {
+                        sDate.setDate(1); sDate.setHours(0, 0, 0, 0);
+                        eDate.setMonth(eDate.getMonth() + 1); eDate.setDate(0); eDate.setHours(23, 59, 59, 999);
+                    }
                 }
+                queryOptions.where.timestamp = { gte: sDate, lte: eDate };
             }
-            queryOptions.where.timestamp = { gte: sDate, lte: eDate };
         } else if (!cpf) {
             const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
             const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);

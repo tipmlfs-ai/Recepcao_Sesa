@@ -146,11 +146,13 @@ const DataAnalytics: React.FC = () => {
         alert(`Drill-down para o setor: ${data.name}. Isso abrirá o modal detalhado na visão de TI.`);
     };
 
-    const handleExport = async (type: 'pdf' | 'xlsx') => {
+    const handleExport = async (type: 'pdf' | 'xlsx', scope: 'global' | 'caderno' = 'global') => {
         setShowExportModal(false);
-        const loadingId = toast.loading(`Gerando exportação global ${type.toUpperCase()}...`);
+        const scopeName = scope === 'caderno' ? 'do Caderno' : 'Global';
+        const loadingId = toast.loading(`Gerando exportação ${scopeName} ${type.toUpperCase()}...`);
         try {
-            let fetchUrl = `${API_URL}/api/export/${type}`;
+            let fetchUrl = scope === 'caderno' ? `${API_URL}/api/export/entry-logs/${type}` : `${API_URL}/api/export/${type}`;
+            
             if (exportFilterType === 'custom') {
                 if (!exportStartDate || !exportEndDate) {
                     toast.dismiss(loadingId);
@@ -163,6 +165,8 @@ const DataAnalytics: React.FC = () => {
                     return;
                 }
                 fetchUrl += `?filterType=custom&startDate=${exportStartDate}&endDate=${exportEndDate}`;
+            } else if (exportFilterType === 'all') {
+                fetchUrl += `?filterType=all`;
             }
 
             const res = await fetch(fetchUrl, {
@@ -175,7 +179,7 @@ const DataAnalytics: React.FC = () => {
             }
             
             const blob = await res.blob();
-            let filename = `Relatorio_Global_Export.${type}`;
+            let filename = scope === 'caderno' ? `Caderno_Entrada.${type}` : `Relatorio_Global_Export.${type}`;
             const disposition = res.headers.get('content-disposition');
             if (disposition && disposition.indexOf('filename=') !== -1) {
                 const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
@@ -195,7 +199,7 @@ const DataAnalytics: React.FC = () => {
             document.body.removeChild(a);
             
             toast.dismiss(loadingId);
-            toast.success(`Exportação global ${type.toUpperCase()} concluída!`);
+            toast.success(`Exportação ${scopeName} ${type.toUpperCase()} concluída!`);
         } catch (error: any) {
             toast.dismiss(loadingId);
             toast.error(error.message || 'Erro ao gerar exportação.');
@@ -348,35 +352,12 @@ const DataAnalytics: React.FC = () => {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3">
-                    <div className="flex rounded-lg shadow-lg overflow-hidden border border-emerald-700">
-                        <button 
-                            disabled={isExporting}
-                            onClick={() => downloadFile(`${API_URL}/api/export/entry-logs/pdf?filterType=month&date=${new Date().toISOString()}`, `Caderno_Entrada_${new Date().getMonth() + 1}.pdf`, 'PDF')}
-                            className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-800/50 px-4 py-2 font-medium transition-colors flex items-center gap-2 text-sm text-white border-r border-emerald-700"
-                        >
-                            {isExporting ? (
-                                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                            ) : <FileText className="w-4 h-4" />}
-                            Caderno (PDF)
-                        </button>
-                        <button 
-                            disabled={isExporting}
-                            onClick={() => downloadFile(`${API_URL}/api/export/entry-logs/xlsx?filterType=month&date=${new Date().toISOString()}`, `Caderno_Entrada_${new Date().getMonth() + 1}.xlsx`, 'XLSX')}
-                            className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-800/50 px-4 py-2 font-medium transition-colors flex items-center gap-2 text-sm text-white"
-                        >
-                            {isExporting ? (
-                                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                            ) : <FileSpreadsheet className="w-4 h-4" />}
-                            Caderno (XLSX)
-                        </button>
-                    </div>
-                    
                     <button 
                         disabled={isExporting}
                         onClick={() => setShowExportModal(true)}
                         className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-800/50 px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 text-sm text-white shadow-lg"
                     >
-                        <Download className="w-4 h-4" /> Exportar Atendimentos
+                        <Download className="w-4 h-4" /> Exportar Relatórios
                     </button>
                 </div>
             </header>
@@ -569,24 +550,41 @@ const DataAnalytics: React.FC = () => {
                             )}
 
                             <div>
-                                <label className="block text-slate-400 text-sm font-bold uppercase mb-3">Formato de Exportação</label>
-                                <div className="grid grid-cols-2 gap-3 mb-3">
+                                <label className="block text-slate-400 text-sm font-bold uppercase mb-3">Exportar Atendimentos (Global)</label>
+                                <div className="grid grid-cols-2 gap-3 mb-4">
                                     <button 
-                                        onClick={() => handleExport('pdf')}
+                                        onClick={() => handleExport('pdf', 'global')}
                                         className="px-4 py-3 rounded-xl bg-slate-800 border border-red-500/30 text-white text-sm font-bold hover:bg-slate-700 hover:border-red-500 transition-all flex flex-col justify-center items-center gap-1"
                                     >
-                                        <FileText className="w-5 h-5 text-red-400" /> Exportar PDF
+                                        <FileText className="w-5 h-5 text-red-400" /> Atendimentos (PDF)
                                     </button>
                                     <button 
-                                        onClick={() => handleExport('xlsx')}
+                                        onClick={() => handleExport('xlsx', 'global')}
                                         className="px-4 py-3 rounded-xl bg-slate-800 border border-emerald-500/30 text-white text-sm font-bold hover:bg-slate-700 hover:border-emerald-500 transition-all flex flex-col justify-center items-center gap-1"
                                     >
-                                        <FileSpreadsheet className="w-5 h-5 text-emerald-400" /> Exportar XLSX
+                                        <FileSpreadsheet className="w-5 h-5 text-emerald-400" /> Atendimentos (XLSX)
                                     </button>
                                 </div>
+
+                                <label className="block text-slate-400 text-sm font-bold uppercase mb-3">Exportar Caderno de Entrada</label>
+                                <div className="grid grid-cols-2 gap-3 mb-4">
+                                    <button 
+                                        onClick={() => handleExport('pdf', 'caderno')}
+                                        className="px-4 py-3 rounded-xl bg-slate-800 border border-orange-500/30 text-white text-sm font-bold hover:bg-slate-700 hover:border-orange-500 transition-all flex flex-col justify-center items-center gap-1"
+                                    >
+                                        <FileText className="w-5 h-5 text-orange-400" /> Caderno (PDF)
+                                    </button>
+                                    <button 
+                                        onClick={() => handleExport('xlsx', 'caderno')}
+                                        className="px-4 py-3 rounded-xl bg-slate-800 border border-green-500/30 text-white text-sm font-bold hover:bg-slate-700 hover:border-green-500 transition-all flex flex-col justify-center items-center gap-1"
+                                    >
+                                        <FileSpreadsheet className="w-5 h-5 text-green-400" /> Caderno (XLSX)
+                                    </button>
+                                </div>
+
                                 <button 
                                     onClick={handleScheduleEmail}
-                                    className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-blue-500/30 text-slate-300 text-sm font-bold hover:bg-slate-700 transition-all flex justify-center items-center gap-2"
+                                    className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-blue-500/30 text-slate-300 text-sm font-bold hover:bg-slate-700 transition-all flex justify-center items-center gap-2 mt-2"
                                 >
                                     <Mail className="w-4 h-4 text-blue-400" /> Agendar por E-mail
                                 </button>
