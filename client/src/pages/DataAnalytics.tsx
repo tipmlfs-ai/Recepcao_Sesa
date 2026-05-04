@@ -210,15 +210,15 @@ const DataAnalytics: React.FC = () => {
 
 
 
-    // Helper for PDF downloading
-    const downloadPdf = async (url: string, filename: string) => {
+    // Helper for file downloading
+    const downloadFile = async (url: string, filename: string, type: 'PDF' | 'XLSX') => {
         try {
             setIsExporting(true);
-            toast.info("Gerando PDF profissional... Isso pode levar alguns segundos.", { id: 'export-loading' });
+            toast.info(`Gerando ${type}... Isso pode levar alguns segundos.`, { id: 'export-loading' });
             const res = await fetch(url, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            if (!res.ok) throw new Error("Erro ao gerar PDF");
+            if (!res.ok) throw new Error(`Erro ao gerar ${type}`);
             
             const blob = await res.blob();
             const downloadUrl = window.URL.createObjectURL(blob);
@@ -229,9 +229,9 @@ const DataAnalytics: React.FC = () => {
             a.click();
             a.remove();
             window.URL.revokeObjectURL(downloadUrl);
-            toast.success("PDF gerado e baixado!", { id: 'export-loading' });
+            toast.success(`${type} gerado e baixado!`, { id: 'export-loading' });
         } catch (err) {
-            toast.error("Erro ao exportar PDF", { id: 'export-loading' });
+            toast.error(`Erro ao exportar ${type}`, { id: 'export-loading' });
         } finally {
             setIsExporting(false);
         }
@@ -348,16 +348,28 @@ const DataAnalytics: React.FC = () => {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3">
-                    <button 
-                        disabled={isExporting}
-                        onClick={() => downloadPdf(`${API_URL}/api/export/entry-logs/pdf?filterType=month&date=${new Date().toISOString()}`, `Caderno_Entrada_${new Date().getMonth() + 1}.pdf`)}
-                        className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-800/50 px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 text-sm text-white shadow-lg"
-                    >
-                        {isExporting ? (
-                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                        ) : <FileText className="w-4 h-4" />}
-                        {isExporting ? 'Gerando...' : 'Exportar Caderno (Mês)'}
-                    </button>
+                    <div className="flex rounded-lg shadow-lg overflow-hidden border border-emerald-700">
+                        <button 
+                            disabled={isExporting}
+                            onClick={() => downloadFile(`${API_URL}/api/export/entry-logs/pdf?filterType=month&date=${new Date().toISOString()}`, `Caderno_Entrada_${new Date().getMonth() + 1}.pdf`, 'PDF')}
+                            className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-800/50 px-4 py-2 font-medium transition-colors flex items-center gap-2 text-sm text-white border-r border-emerald-700"
+                        >
+                            {isExporting ? (
+                                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                            ) : <FileText className="w-4 h-4" />}
+                            Caderno (PDF)
+                        </button>
+                        <button 
+                            disabled={isExporting}
+                            onClick={() => downloadFile(`${API_URL}/api/export/entry-logs/xlsx?filterType=month&date=${new Date().toISOString()}`, `Caderno_Entrada_${new Date().getMonth() + 1}.xlsx`, 'XLSX')}
+                            className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-800/50 px-4 py-2 font-medium transition-colors flex items-center gap-2 text-sm text-white"
+                        >
+                            {isExporting ? (
+                                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                            ) : <FileSpreadsheet className="w-4 h-4" />}
+                            Caderno (XLSX)
+                        </button>
+                    </div>
                     
                     <button 
                         disabled={isExporting}

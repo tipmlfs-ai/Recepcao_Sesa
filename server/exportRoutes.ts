@@ -147,8 +147,10 @@ router.get('/xlsx', async (req, res) => {
         // Aba 2: Raw Data
         const rawSheet = workbook.addWorksheet('Raw Data', { views: [{ state: 'frozen', xSplit: 0, ySplit: 1 }] });
         rawSheet.columns = [
-            { header: 'Entrada', key: 'timestamp', width: 20 },
-            { header: 'Atendido em', key: 'finishedAt', width: 20 },
+            { header: 'Data Entrada', key: 'entryDate', width: 15 },
+            { header: 'Hora Entrada', key: 'entryTime', width: 15 },
+            { header: 'Data Atend.', key: 'finishedDate', width: 15 },
+            { header: 'Hora Atend.', key: 'finishedTime', width: 15 },
             { header: 'Ticket', key: 'code', width: 15 },
             { header: 'Status', key: 'status', width: 15 },
             { header: 'Cidadão', key: 'citizenName', width: 30 },
@@ -160,28 +162,30 @@ router.get('/xlsx', async (req, res) => {
         rawSheet.getRow(1).font = { bold: true };
         rawSheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
         rawSheet.getRow(1).font = { color: { argb: 'FFFFFFFF' }, bold: true };
-        rawSheet.autoFilter = 'A1:G1';
+        rawSheet.autoFilter = 'A1:J1';
 
         visits.forEach((v: any) => {
-            // Adjust to UTC-3 for display
             const adjustDate = (d: Date | null) => {
                 if (!d) return null;
                 return new Date(new Date(d).getTime() - 3 * 60 * 60 * 1000);
             };
 
-            const row = rawSheet.addRow({
-                timestamp: adjustDate(v.timestamp),
-                finishedAt: (v.finishedAt && v.ticketStatus !== 'NO_SHOW') ? adjustDate(v.finishedAt) : null,
+            const entryD = adjustDate(v.timestamp);
+            const exitD = (v.finishedAt && v.ticketStatus !== 'NO_SHOW') ? adjustDate(v.finishedAt) : null;
+            const formatCpf = (cpf: string) => cpf ? cpf.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, "$1.$2.$3-$4") : '-';
+
+            rawSheet.addRow({
+                entryDate: entryD ? format(entryD, 'dd/MM/yyyy') : '-',
+                entryTime: entryD ? format(entryD, 'HH:mm') : '-',
+                finishedDate: exitD ? format(exitD, 'dd/MM/yyyy') : '-',
+                finishedTime: exitD ? format(exitD, 'HH:mm') : '-',
                 code: v.code,
                 status: translateStatus(v.ticketStatus),
                 citizenName: v.citizen?.name,
-                citizenCpf: v.citizenId,
+                citizenCpf: formatCpf(v.citizenId),
                 sectorName: v.sector?.name,
                 userEmail: v.user?.email || '-'
             });
-            // formatting timestamp columns as native excel dates
-            row.getCell('timestamp').numFmt = 'dd/mm/yyyy hh:mm';
-            row.getCell('finishedAt').numFmt = 'dd/mm/yyyy hh:mm';
         });
 
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -222,28 +226,35 @@ router.get('/pdf', async (req, res) => {
         const waitingCount = visits.filter((v: any) => v.ticketStatus === 'WAITING').length;
 
         let tableRowsHtml = '';
+        const formatCpf = (cpf: string) => cpf ? cpf.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, "$1.$2.$3-$4") : '-';
+
         visits.forEach((v: any) => {
-            const formatBrasilia = (d: any) => {
+            const formatBrasilia = (d: any, tType: 'date' | 'time') => {
                 if (!d) return '-';
                 try {
-                    return new Intl.DateTimeFormat('pt-BR', {
-                        day: '2-digit', month: '2-digit', year: 'numeric',
-                        hour: '2-digit', minute: '2-digit',
-                        timeZone: 'America/Sao_Paulo'
-                    }).format(new Date(d));
+                    const dt = new Date(d);
+                    if (tType === 'date') return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Sao_Paulo' }).format(dt);
+                    if (tType === 'time') return new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }).format(dt);
                 } catch (e) { return '-'; }
+                return '-';
             };
             
-            const displayEntry = formatBrasilia(v.timestamp);
-            const displayExit = (v.ticketStatus === 'FINISHED' || v.ticketStatus === 'NO_SHOW') ? formatBrasilia(v.finishedAt || v.calledAt) : '-';
+            const entryDate = formatBrasilia(v.timestamp, 'date');
+            const entryTime = formatBrasilia(v.timestamp, 'time');
+            const exitD = (v.ticketStatus === 'FINISHED' || v.ticketStatus === 'NO_SHOW') ? (v.finishedAt || v.calledAt) : null;
+            const exitDate = exitD ? formatBrasilia(exitD, 'date') : '-';
+            const exitTime = exitD ? formatBrasilia(exitD, 'time') : '-';
             
             tableRowsHtml += `
                 <tr>
-                    <td>${displayEntry}</td>
-                    <td>${displayExit}</td>
+                    <td>${entryDate}</td>
+                    <td>${entryTime}</td>
+                    <td>${exitDate}</td>
+                    <td>${exitTime}</td>
                     <td>${v.code || '-'}</td>
                     <td>${translateStatus(v.ticketStatus)}</td>
                     <td>${v.citizen?.name || 'Anônimo'}</td>
+                    <td>${formatCpf(v.citizenId)}</td>
                     <td>${v.sector?.name || 'Geral'}</td>
                 </tr>
             `;
@@ -286,11 +297,14 @@ router.get('/pdf', async (req, res) => {
             <table>
                 <thead>
                     <tr>
-                        <th>Entrada</th>
-                        <th>Atendido em</th>
+                        <th>Data Ent.</th>
+                        <th>Hora Ent.</th>
+                        <th>Data Atend.</th>
+                        <th>Hora Atend.</th>
                         <th>Ticket</th>
                         <th>Status</th>
                         <th>Cidadão</th>
+                        <th>CPF</th>
                         <th>Setor</th>
                     </tr>
                 </thead>
@@ -425,24 +439,28 @@ router.get('/entry-logs/pdf', async (req, res) => {
         }
 
         let tableRowsHtml = '';
+        const formatCpf = (cpf: string) => cpf ? cpf.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, "$1.$2.$3-$4") : '-';
+
         logs.forEach((log: any) => {
-            const formatBrasilia = (d: any) => {
+            const formatBrasilia = (d: any, tType: 'date' | 'time') => {
                 if (!d) return '-';
                 try {
-                    return new Intl.DateTimeFormat('pt-BR', {
-                        day: '2-digit', month: '2-digit', year: 'numeric',
-                        hour: '2-digit', minute: '2-digit',
-                        timeZone: 'America/Sao_Paulo'
-                    }).format(new Date(d));
+                    const dt = new Date(d);
+                    if (tType === 'date') return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Sao_Paulo' }).format(dt);
+                    if (tType === 'time') return new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }).format(dt);
                 } catch (e) { return '-'; }
+                return '-';
             };
-            const displayEntry = formatBrasilia(log.timestamp);
+            
+            const entryDate = formatBrasilia(log.timestamp, 'date');
+            const entryTime = formatBrasilia(log.timestamp, 'time');
             
             tableRowsHtml += `
                 <tr>
-                    <td>${displayEntry}</td>
+                    <td>${entryDate}</td>
+                    <td>${entryTime}</td>
                     <td>${log.name}</td>
-                    <td>${log.cpf}</td>
+                    <td>${formatCpf(log.cpf)}</td>
                     <td>${log.phone || '-'}</td>
                     <td>${log.sector?.name || 'Geral'}</td>
                 </tr>
@@ -477,7 +495,8 @@ router.get('/entry-logs/pdf', async (req, res) => {
             <table>
                 <thead>
                     <tr>
-                        <th>Horário de Entrada</th>
+                        <th>Data Entrada</th>
+                        <th>Hora Entrada</th>
                         <th>Cidadão</th>
                         <th>CPF</th>
                         <th>Telefone</th>
@@ -542,6 +561,114 @@ router.get('/entry-logs/pdf', async (req, res) => {
         if (browser !== null) {
             await browser.close().catch(console.error);
         }
+    }
+});
+
+// --- XLSX Export for Entry Logs (Caderno de Entrada) ---
+router.get('/entry-logs/xlsx', async (req, res) => {
+    try {
+        const date = req.query.date as string;
+        const filterType = req.query.filterType as string;
+        const startDate = req.query.startDate as string;
+        const endDate = req.query.endDate as string;
+        const sectorId = req.query.sectorId as string;
+        const cpf = req.query.cpf as string;
+
+        let queryOptions: any = {
+            include: { sector: true },
+            orderBy: { timestamp: 'desc' },
+            where: {}
+        };
+
+        if (sectorId) queryOptions.where.sectorId = sectorId as string;
+        if (cpf) queryOptions.where.cpf = { contains: cpf as string };
+
+        if (filterType) {
+            let sDate: Date;
+            let eDate: Date;
+
+            if (filterType === 'custom') {
+                if (startDate && endDate) {
+                    sDate = new Date((startDate as string) + 'T00:00:00-03:00');
+                    eDate = new Date((endDate as string) + 'T23:59:59.999-03:00');
+                } else {
+                    sDate = new Date(); sDate.setHours(0, 0, 0, 0);
+                    eDate = new Date(); eDate.setHours(23, 59, 59, 999);
+                }
+            } else {
+                const targetDate = date ? new Date(date as string) : new Date();
+                sDate = new Date(targetDate); eDate = new Date(targetDate);
+
+                if (filterType === 'day') {
+                    sDate.setHours(0, 0, 0, 0); eDate.setHours(23, 59, 59, 999);
+                } else if (filterType === 'week') {
+                    const day = sDate.getDay();
+                    sDate.setDate(sDate.getDate() - day); sDate.setHours(0, 0, 0, 0);
+                    eDate.setDate(eDate.getDate() + (6 - day)); eDate.setHours(23, 59, 59, 999);
+                } else if (filterType === 'month') {
+                    sDate.setDate(1); sDate.setHours(0, 0, 0, 0);
+                    eDate.setMonth(eDate.getMonth() + 1); eDate.setDate(0); eDate.setHours(23, 59, 59, 999);
+                }
+            }
+            queryOptions.where.timestamp = { gte: sDate, lte: eDate };
+        } else if (!cpf) {
+            const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+            const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
+            queryOptions.where.timestamp = { gte: todayStart, lte: todayEnd };
+        }
+
+        const logs = await prisma.entryLog.findMany(queryOptions);
+
+        const workbook = new ExcelJS.Workbook();
+        workbook.creator = 'Recepção SESA';
+        workbook.created = new Date();
+
+        const sheet = workbook.addWorksheet('Caderno de Entrada', { views: [{ state: 'frozen', xSplit: 0, ySplit: 1 }] });
+        sheet.columns = [
+            { header: 'Data Entrada', key: 'date', width: 15 },
+            { header: 'Hora Entrada', key: 'time', width: 15 },
+            { header: 'Cidadão', key: 'name', width: 30 },
+            { header: 'CPF', key: 'cpf', width: 20 },
+            { header: 'Telefone', key: 'phone', width: 20 },
+            { header: 'Setor de Destino', key: 'sectorName', width: 30 }
+        ];
+
+        sheet.getRow(1).font = { bold: true };
+        sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF064E3B' } };
+        sheet.getRow(1).font = { color: { argb: 'FFFFFFFF' }, bold: true };
+        sheet.autoFilter = 'A1:F1';
+
+        const formatCpf = (cpf: string) => cpf ? cpf.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, "$1.$2.$3-$4") : '-';
+
+        logs.forEach((log: any) => {
+            const adjustDate = (d: Date | null) => {
+                if (!d) return null;
+                return new Date(new Date(d).getTime() - 3 * 60 * 60 * 1000);
+            };
+
+            const entryD = adjustDate(log.timestamp);
+
+            sheet.addRow({
+                date: entryD ? format(entryD, 'dd/MM/yyyy') : '-',
+                time: entryD ? format(entryD, 'HH:mm') : '-',
+                name: log.name,
+                cpf: formatCpf(log.cpf),
+                phone: log.phone || '-',
+                sectorName: log.sector?.name || 'Geral'
+            });
+        });
+
+        let fileDate = '';
+        try { fileDate = format(new Date(), 'yyyyMMdd'); } catch(e) { fileDate = 'Export'; }
+
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', `attachment; filename=CadernoEntrada_${fileDate}.xlsx`);
+
+        await workbook.xlsx.write(res);
+        res.end();
+    } catch (error) {
+        console.error('XLSX Export EntryLog Error:', error);
+        res.status(500).json({ error: 'Falha ao exportar planilha do Caderno de Entrada' });
     }
 });
 
